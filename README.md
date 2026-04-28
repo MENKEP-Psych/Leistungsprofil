@@ -185,13 +185,4 @@ Erzeugt in `release/`:
 - `Leistungsprofil-X.X.X-portable.exe` — empfohlen für Deployment (kein Installer nötig)
 - `Leistungsprofil Setup X.X.X.exe` — klassischer NSIS-Installer (braucht Admin-Rechte)
 
-### Was nicht ins Repository gehört
 
-Folgende Dateien sind über `.gitignore` ausgeschlossen und dürfen **niemals** eingecheckt werden:
-
-| Datei | Grund |
-|---|---|
-| `*.sqlite`, `*.key`, `*.recovery` | Patientendaten / Schlüsselmaterial |
-| `FIRST-RUN-CREDENTIALS.txt` | Zugangsdaten |
-| `.env` | Ggf. Firebase-Credentials |
-| `firebase-applet-config.json` | Firebase-Zugangsdaten |
