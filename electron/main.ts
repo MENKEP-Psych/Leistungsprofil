@@ -226,7 +226,14 @@ ipcMain.handle('sync:push', () => {
   const pullTime = config.pullTime ?? 0;
   const result = pushToServer(config.serverDbPath, config.dbPath, pullTime);
   if (result.success) {
-    // Update pull_time so the next push doesn't re-push the same records.
+    // After a successful push, pull the master DB back so the local copy reflects
+    // all changes from other clients that were already on the server.
+    try {
+      db.closeDatabase();
+      pullFromServer(config.serverDbPath, config.dbPath);
+    } finally {
+      db.openDatabase(config.dbPath);
+    }
     config.pullTime = Math.floor(Date.now() / 1000);
     saveConfig(config);
   }
