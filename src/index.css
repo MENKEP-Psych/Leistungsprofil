@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 active:scale-95;
+  }
+}
+
+@media print {
+  /* ── Force color printing ──────────────────────────────────────────────── */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    animation-duration: 0s !important;
+    transition: none !important;
+  }
+
+  body {
+    background-color: white !important;
+  }
+
+  /* ── Fix overflowing root containers ──────────────────────────────────── */
+  #root > div {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #root > div > div {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ── Hide sidebar, action buttons, general note ───────────────────────── */
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  /* ── PatientHeader: keep patient info, hide buttons & note row ────────── */
+  header {
+    position: static !important;
+    box-shadow: none !important;
+    padding-bottom: 8px !important;
+  }
+
+  /* ── Main content: full-width, visible ────────────────────────────────── */
+  main {
+    padding: 12px 0 0 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+
+  /* ── Remove decorative shadows ────────────────────────────────────────── */
+  [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  /* ── Chart improvements ───────────────────────────────────────────────── */
+
+  /* Taller bar rows for better visibility */
+  .pr-bar-row {
+    height: 36px !important;
+  }
+
+  /* Slightly larger test labels */
+  .pr-label-text {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+  }
+
+  /* Keep chart border visible */
+  .pr-chart {
+    border: 1px solid #e2e8f0 !important;
+    padding: 12px !important;
+  }
+
+  /* Make zone dividers visible in print */
+  .pr-zone-div-major {
+    width: 2px !important;
+    background-color: rgba(0,0,0,0.4) !important;
+  }
+
+  .pr-zone-div-minor {
+    background-color: rgba(0,0,0,0.15) !important;
+  }
+
+  /* Group header badges */
+  .pr-group-badge {
+    border: 1px solid !important;
+    padding: 2px 8px !important;
+  }
+}

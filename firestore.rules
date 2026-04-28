@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: patients
+    // Document ID: {pid}
+    // Fields:
+    //   - pid: string (required) - Patient ID
+    //   - encryptedName: string (required) - AES-256 encrypted name
+    //   - encryptedGeburtsdatum: string (required) - AES-256 encrypted DOB
+    //   - encryptedResults: string (required) - AES-256 encrypted TestResult[]
+    //   - encryptedGeneralNote: string (optional) - AES-256 encrypted string
+    //   - updatedAt: timestamp (required) - Last update time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "PaulMenke2@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isValidPatientData(data) {
+      return data.keys().hasAll(['pid', 'encryptedName', 'encryptedGeburtsdatum', 'encryptedResults', 'updatedAt']) &&
+             data.pid is string &&
+             data.encryptedName is string &&
+             data.encryptedGeburtsdatum is string &&
+             data.encryptedResults is string &&
+             (data.updatedAt is timestamp || data.updatedAt == null);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /patients/{pid} {
+      // Only authenticated users can read/write patient data
+      // In a real clinic, we'd have more granular RBAC, but for now, any auth'd user (admin) can access
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPatientData(request.resource.data);
+      allow update: if isAuthenticated() && isValidPatientData(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

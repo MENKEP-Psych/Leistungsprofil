@@ -1,0 +1,128 @@
+{
+  "meta": {
+    "test": "WMS-R Zahlenspanne",
+    "normset": "Altersgruppen",
+    "titel": "Prozentränge nach Altersgruppen für Zahlenspanne vorwärts und rückwärts",
+    "einheit": "Rohwert (Anzahl richtig wiederholter Zahlenfolgen, max. 12 je Richtung)",
+    "hinweis": "Höhere Rohwerte = bessere Leistung. Getrennte Normen für vorwärts und rückwärts. PR-Lookup: Altersgruppe und Rohwert bestimmen den PR.",
+    "quelle": "WMS-R Zahlenspanne [ZN 3] – Normtabelle"
+  },
+  "altersgruppen": [
+    {
+      "label": "15–19 Jahre",
+      "von": 15,
+      "bis": 19,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": 98, "pr_rueckwaerts": 98 },
+        { "rohwert": 9,  "pr_vorwaerts": 87, "pr_rueckwaerts": 85 },
+        { "rohwert": 8,  "pr_vorwaerts": 63, "pr_rueckwaerts": 75 },
+        { "rohwert": 7,  "pr_vorwaerts": 38, "pr_rueckwaerts": 63 },
+        { "rohwert": 6,  "pr_vorwaerts": 18, "pr_rueckwaerts": 37 },
+        { "rohwert": 5,  "pr_vorwaerts": 5,  "pr_rueckwaerts": 12 },
+        { "rohwert": 4,  "pr_vorwaerts": null, "pr_rueckwaerts": 3 }
+      ]
+    },
+    {
+      "label": "20–25 Jahre",
+      "von": 20,
+      "bis": 25,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": 98, "pr_rueckwaerts": null },
+        { "rohwert": 11, "pr_vorwaerts": 93, "pr_rueckwaerts": 95 },
+        { "rohwert": 10, "pr_vorwaerts": 84, "pr_rueckwaerts": 88 },
+        { "rohwert": 9,  "pr_vorwaerts": 71, "pr_rueckwaerts": 75 },
+        { "rohwert": 8,  "pr_vorwaerts": 48, "pr_rueckwaerts": null },
+        { "rohwert": 7,  "pr_vorwaerts": 29, "pr_rueckwaerts": 53 },
+        { "rohwert": 6,  "pr_vorwaerts": 17, "pr_rueckwaerts": 29 },
+        { "rohwert": 5,  "pr_vorwaerts": 5,  "pr_rueckwaerts": 14 },
+        { "rohwert": 4,  "pr_vorwaerts": null, "pr_rueckwaerts": 9 },
+        { "rohwert": 3,  "pr_vorwaerts": null, "pr_rueckwaerts": 3 }
+      ]
+    },
+    {
+      "label": "26–34 Jahre",
+      "von": 26,
+      "bis": 34,
+      "normen": [
+        { "rohwert": 11, "pr_vorwaerts": 97,  "pr_rueckwaerts": null },
+        { "rohwert": 10, "pr_vorwaerts": 87,  "pr_rueckwaerts": 98 },
+        { "rohwert": 9,  "pr_vorwaerts": 68,  "pr_rueckwaerts": 92 },
+        { "rohwert": 8,  "pr_vorwaerts": 45,  "pr_rueckwaerts": 80 },
+        { "rohwert": 7,  "pr_vorwaerts": 25,  "pr_rueckwaerts": 56 },
+        { "rohwert": 6,  "pr_vorwaerts": 12,  "pr_rueckwaerts": 42 },
+        { "rohwert": 5,  "pr_vorwaerts": 5,   "pr_rueckwaerts": 17 },
+        { "rohwert": 4,  "pr_vorwaerts": 2,   "pr_rueckwaerts": 5 },
+        { "rohwert": 3,  "pr_vorwaerts": null, "pr_rueckwaerts": 2 }
+      ]
+    },
+    {
+      "label": "35–44 Jahre",
+      "von": 35,
+      "bis": 44,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": null, "pr_rueckwaerts": 98 },
+        { "rohwert": 11, "pr_vorwaerts": 97,  "pr_rueckwaerts": 93 },
+        { "rohwert": 10, "pr_vorwaerts": 88,  "pr_rueckwaerts": 86 },
+        { "rohwert": 9,  "pr_vorwaerts": 75,  "pr_rueckwaerts": 80 },
+        { "rohwert": 8,  "pr_vorwaerts": 57,  "pr_rueckwaerts": null },
+        { "rohwert": 7,  "pr_vorwaerts": 35,  "pr_rueckwaerts": 58 },
+        { "rohwert": 6,  "pr_vorwaerts": 18,  "pr_rueckwaerts": 30 },
+        { "rohwert": 5,  "pr_vorwaerts": 8,   "pr_rueckwaerts": 12 },
+        { "rohwert": 4,  "pr_vorwaerts": 2,   "pr_rueckwaerts": 5 },
+        { "rohwert": 3,  "pr_vorwaerts": null, "pr_rueckwaerts": null }
+      ]
+    },
+    {
+      "label": "45–54 Jahre",
+      "von": 45,
+      "bis": 54,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": null, "pr_rueckwaerts": 98 },
+        { "rohwert": 11, "pr_vorwaerts": 95,  "pr_rueckwaerts": 95 },
+        { "rohwert": 10, "pr_vorwaerts": 85,  "pr_rueckwaerts": 92 },
+        { "rohwert": 9,  "pr_vorwaerts": 69,  "pr_rueckwaerts": 87 },
+        { "rohwert": 8,  "pr_vorwaerts": null, "pr_rueckwaerts": null },
+        { "rohwert": 7,  "pr_vorwaerts": 34,  "pr_rueckwaerts": 52 },
+        { "rohwert": 6,  "pr_vorwaerts": 13,  "pr_rueckwaerts": 34 },
+        { "rohwert": 5,  "pr_vorwaerts": 2,   "pr_rueckwaerts": 13 },
+        { "rohwert": 4,  "pr_vorwaerts": null, "pr_rueckwaerts": 2 }
+      ]
+    },
+    {
+      "label": "55–64 Jahre",
+      "von": 55,
+      "bis": 64,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": 98,  "pr_rueckwaerts": null },
+        { "rohwert": 11, "pr_vorwaerts": 98,  "pr_rueckwaerts": null },
+        { "rohwert": 10, "pr_vorwaerts": 88,  "pr_rueckwaerts": 97 },
+        { "rohwert": 9,  "pr_vorwaerts": 71,  "pr_rueckwaerts": 88 },
+        { "rohwert": 8,  "pr_vorwaerts": 48,  "pr_rueckwaerts": 67 },
+        { "rohwert": 7,  "pr_vorwaerts": null, "pr_rueckwaerts": null },
+        { "rohwert": 6,  "pr_vorwaerts": 20,  "pr_rueckwaerts": 38 },
+        { "rohwert": 5,  "pr_vorwaerts": null, "pr_rueckwaerts": 12 },
+        { "rohwert": 4,  "pr_vorwaerts": 2,   "pr_rueckwaerts": null },
+        { "rohwert": 3,  "pr_vorwaerts": null, "pr_rueckwaerts": null },
+        { "rohwert": 2,  "pr_vorwaerts": null, "pr_rueckwaerts": 2 }
+      ]
+    },
+    {
+      "label": "65–74 Jahre",
+      "von": 65,
+      "bis": 74,
+      "normen": [
+        { "rohwert": 12, "pr_vorwaerts": null, "pr_rueckwaerts": null },
+        { "rohwert": 11, "pr_vorwaerts": 98,  "pr_rueckwaerts": null },
+        { "rohwert": 10, "pr_vorwaerts": 95,  "pr_rueckwaerts": null },
+        { "rohwert": 9,  "pr_vorwaerts": 88,  "pr_rueckwaerts": 93 },
+        { "rohwert": 8,  "pr_vorwaerts": 76,  "pr_rueckwaerts": 85 },
+        { "rohwert": 7,  "pr_vorwaerts": 53,  "pr_rueckwaerts": 78 },
+        { "rohwert": 6,  "pr_vorwaerts": 28,  "pr_rueckwaerts": 53 },
+        { "rohwert": 5,  "pr_vorwaerts": 15,  "pr_rueckwaerts": 27 },
+        { "rohwert": 4,  "pr_vorwaerts": 5,   "pr_rueckwaerts": 13 },
+        { "rohwert": 3,  "pr_vorwaerts": null, "pr_rueckwaerts": null },
+        { "rohwert": 2,  "pr_vorwaerts": null, "pr_rueckwaerts": 2 }
+      ]
+    }
+  ]
+}

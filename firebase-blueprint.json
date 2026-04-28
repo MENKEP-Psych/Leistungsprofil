@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "PatientData": {
+      "title": "Patient Data",
+      "description": "Encrypted patient test results and notes",
+      "type": "object",
+      "properties": {
+        "pid": { "type": "string" },
+        "encryptedResults": { "type": "string", "description": "AES-256 encrypted TestResult[]" },
+        "encryptedGeneralNote": { "type": "string", "description": "AES-256 encrypted string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pid", "encryptedResults", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/patients/{pid}": {
+      "schema": "PatientData",
+      "description": "Patient-specific data container"
+    }
+  }
+}

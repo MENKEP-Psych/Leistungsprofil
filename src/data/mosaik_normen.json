@@ -1,0 +1,188 @@
+{
+  "meta": {
+    "test": "WIE Mosaik-Test",
+    "normset": "Altersgruppen",
+    "titel": "Normtabelle Rohwertsummen nach Altersgruppen (Aufgabe 5–14)",
+    "einheit": "Rohwertsumme (inkl. Zeitbonus)",
+    "hinweis": "Höhere Werte = bessere Leistung. AWP (Altersgewichteter Wertpunkt) und PR via Altersgruppe und Rohwertsumme. Bearbeitungszeit max. 60 Sek. für Aufgaben 5–9, max. 120 Sek. für Aufgaben 10–14. Abbruch nach 3 Fehlversuchen in Folge. Maximale Punktzahl: 68.",
+    "quelle": "WIE Mosaik-Test [MT 2a] – Normtabelle"
+  },
+  "altersgruppen_spalten": [
+    "16–17 Jahre", "18–19 Jahre", "20–24 Jahre", "25–29 Jahre",
+    "30–34 Jahre", "35–44 Jahre", "45–54 Jahre", "55–64 Jahre",
+    "65–69 Jahre", "70–74 Jahre", "75–79 Jahre", "80–84 Jahre", "85–89 Jahre"
+  ],
+  "normen": [
+    {
+      "awp": 19, "pr": 100,
+      "rohwerte": {
+        "16–17 Jahre": null, "18–19 Jahre": null, "20–24 Jahre": null, "25–29 Jahre": null,
+        "30–34 Jahre": null, "35–44 Jahre": null, "45–54 Jahre": "68",
+        "55–64 Jahre": "67–68", "65–69 Jahre": "66–68", "70–74 Jahre": "66–68",
+        "75–79 Jahre": "66–68", "80–84 Jahre": "66–68", "85–89 Jahre": "66–68"
+      }
+    },
+    {
+      "awp": 18, "pr": 99,
+      "rohwerte": {
+        "16–17 Jahre": "68", "18–19 Jahre": null, "20–24 Jahre": null, "25–29 Jahre": null,
+        "30–34 Jahre": null, "35–44 Jahre": "68", "45–54 Jahre": "66–67",
+        "55–64 Jahre": "64–66", "65–69 Jahre": "63–65", "70–74 Jahre": "62–65",
+        "75–79 Jahre": "62–65", "80–84 Jahre": "62–65", "85–89 Jahre": "61–65"
+      }
+    },
+    {
+      "awp": 17, "pr": 99,
+      "rohwerte": {
+        "16–17 Jahre": "67", "18–19 Jahre": "68", "20–24 Jahre": "68", "25–29 Jahre": "68",
+        "30–34 Jahre": "68", "35–44 Jahre": "67", "45–54 Jahre": "64–65",
+        "55–64 Jahre": "60–63", "65–69 Jahre": "59–62", "70–74 Jahre": "58–61",
+        "75–79 Jahre": "57–61", "80–84 Jahre": "57–61", "85–89 Jahre": "56–60"
+      }
+    },
+    {
+      "awp": 16, "pr": 98,
+      "rohwerte": {
+        "16–17 Jahre": "66", "18–19 Jahre": "67", "20–24 Jahre": "67", "25–29 Jahre": "67",
+        "30–34 Jahre": "67", "35–44 Jahre": "65–66", "45–54 Jahre": "61–63",
+        "55–64 Jahre": "57–59", "65–69 Jahre": "55–58", "70–74 Jahre": "54–57",
+        "75–79 Jahre": "53–57", "80–84 Jahre": "52–56", "85–89 Jahre": "51–55"
+      }
+    },
+    {
+      "awp": 15, "pr": 96,
+      "rohwerte": {
+        "16–17 Jahre": "64–65", "18–19 Jahre": "65–66", "20–24 Jahre": "65–66", "25–29 Jahre": "65–66",
+        "30–34 Jahre": "65–66", "35–44 Jahre": "63–64", "45–54 Jahre": "58–60",
+        "55–64 Jahre": "54–56", "65–69 Jahre": "51–54", "70–74 Jahre": "50–53",
+        "75–79 Jahre": "49–52", "80–84 Jahre": "48–51", "85–89 Jahre": "46–50"
+      }
+    },
+    {
+      "awp": 14, "pr": 91,
+      "rohwerte": {
+        "16–17 Jahre": "61–63", "18–19 Jahre": "63–64", "20–24 Jahre": "63–64", "25–29 Jahre": "63–64",
+        "30–34 Jahre": "63–64", "35–44 Jahre": "60–62", "45–54 Jahre": "55–57",
+        "55–64 Jahre": "50–43", "65–69 Jahre": "48–50", "70–74 Jahre": "46–49",
+        "75–79 Jahre": "45–48", "80–84 Jahre": "43–47", "85–89 Jahre": "41–45"
+      }
+    },
+    {
+      "awp": 13, "pr": 84,
+      "rohwerte": {
+        "16–17 Jahre": "58–60", "18–19 Jahre": "60–62", "20–24 Jahre": "61–62", "25–29 Jahre": "61–62",
+        "30–34 Jahre": "61–62", "35–44 Jahre": "57–59", "45–54 Jahre": "52–54",
+        "55–64 Jahre": "47–49", "65–69 Jahre": "44–47", "70–74 Jahre": "42–45",
+        "75–79 Jahre": "41–44", "80–84 Jahre": "38–42", "85–89 Jahre": "36–40"
+      }
+    },
+    {
+      "awp": 12, "pr": 75,
+      "rohwerte": {
+        "16–17 Jahre": "55–57", "18–19 Jahre": "58–59", "20–24 Jahre": "58–60", "25–29 Jahre": "58–60",
+        "30–34 Jahre": "58–60", "35–44 Jahre": "54–56", "45–54 Jahre": "48–51",
+        "55–64 Jahre": "43–46", "65–69 Jahre": "40–43", "70–74 Jahre": "38–41",
+        "75–79 Jahre": "36–40", "80–84 Jahre": "34–37", "85–89 Jahre": "31–35"
+      }
+    },
+    {
+      "awp": 11, "pr": 63,
+      "rohwerte": {
+        "16–17 Jahre": "52–54", "18–19 Jahre": "53–55", "20–24 Jahre": "55–57", "25–29 Jahre": "55–57",
+        "30–34 Jahre": "55–57", "35–44 Jahre": "51–53", "45–54 Jahre": "45–47",
+        "55–64 Jahre": "39–42", "65–69 Jahre": "36–39", "70–74 Jahre": "34–37",
+        "75–79 Jahre": "32–35", "80–84 Jahre": "30–33", "85–89 Jahre": "26–30"
+      }
+    },
+    {
+      "awp": 10, "pr": 50,
+      "rohwerte": {
+        "16–17 Jahre": "48–51", "18–19 Jahre": "49–52", "20–24 Jahre": "51–54", "25–29 Jahre": "51–54",
+        "30–34 Jahre": "51–54", "35–44 Jahre": "47–50", "45–54 Jahre": "41–44",
+        "55–64 Jahre": "36–38", "65–69 Jahre": "32–35", "70–74 Jahre": "30–33",
+        "75–79 Jahre": "28–31", "80–84 Jahre": "25–29", "85–89 Jahre": "22–25"
+      }
+    },
+    {
+      "awp": 9, "pr": 37,
+      "rohwerte": {
+        "16–17 Jahre": "43–47", "18–19 Jahre": "44–48", "20–24 Jahre": "46–50", "25–29 Jahre": "46–50",
+        "30–34 Jahre": "46–50", "35–44 Jahre": "43–46", "45–54 Jahre": "37–40",
+        "55–64 Jahre": "32–35", "65–69 Jahre": "28–31", "70–74 Jahre": "26–29",
+        "75–79 Jahre": "24–27", "80–84 Jahre": "21–24", "85–89 Jahre": "18–21"
+      }
+    },
+    {
+      "awp": 8, "pr": 25,
+      "rohwerte": {
+        "16–17 Jahre": "38–42", "18–19 Jahre": "40–43", "20–24 Jahre": "41–45", "25–29 Jahre": "41–45",
+        "30–34 Jahre": "41–45", "35–44 Jahre": "39–42", "45–54 Jahre": "33–36",
+        "55–64 Jahre": "28–31", "65–69 Jahre": "25–27", "70–74 Jahre": "23–25",
+        "75–79 Jahre": "20–23", "80–84 Jahre": "18–20", "85–89 Jahre": "14–17"
+      }
+    },
+    {
+      "awp": 7, "pr": 16,
+      "rohwerte": {
+        "16–17 Jahre": "34–37", "18–19 Jahre": "35–39", "20–24 Jahre": "37–40", "25–29 Jahre": "37–40",
+        "30–34 Jahre": "37–40", "35–44 Jahre": "34–38", "45–54 Jahre": "29–32",
+        "55–64 Jahre": "24–27", "65–69 Jahre": "21–24", "70–74 Jahre": "19–22",
+        "75–79 Jahre": "17–19", "80–84 Jahre": "14–17", "85–89 Jahre": "11–13"
+      }
+    },
+    {
+      "awp": 6, "pr": 9,
+      "rohwerte": {
+        "16–17 Jahre": "29–33", "18–19 Jahre": "31–34", "20–24 Jahre": "32–36", "25–29 Jahre": "32–36",
+        "30–34 Jahre": "32–36", "35–44 Jahre": "30–33", "45–54 Jahre": "25–28",
+        "55–64 Jahre": "20–23", "65–69 Jahre": "17–20", "70–74 Jahre": "15–18",
+        "75–79 Jahre": "13–16", "80–84 Jahre": "11–13", "85–89 Jahre": "7–10"
+      }
+    },
+    {
+      "awp": 5, "pr": 4,
+      "rohwerte": {
+        "16–17 Jahre": "24–28", "18–19 Jahre": "26–30", "20–24 Jahre": "28–31", "25–29 Jahre": "28–31",
+        "30–34 Jahre": "28–31", "35–44 Jahre": "25–29", "45–54 Jahre": "21–24",
+        "55–64 jahre": "16–19", "65–69 Jahre": "13–16", "70–74 Jahre": "12–14",
+        "75–79 Jahre": "10–12", "80–84 Jahre": "7–10", "85–89 Jahre": "4–6"
+      }
+    },
+    {
+      "awp": 4, "pr": 2,
+      "rohwerte": {
+        "16–17 Jahre": "19–23", "18–19 Jahre": "21–25", "20–24 Jahre": "23–27", "25–29 Jahre": "23–27",
+        "30–34 Jahre": "23–27", "35–44 Jahre": "21–24", "45–54 Jahre": "17–20",
+        "55–64 Jahre": "12–15", "65–69 Jahre": "10–12", "70–74 Jahre": "8–11",
+        "75–79 Jahre": "6–9", "80–84 Jahre": "4–6", "85–89 Jahre": "2–3"
+      }
+    },
+    {
+      "awp": 3, "pr": 1,
+      "rohwerte": {
+        "16–17 Jahre": "13–18", "18–19 Jahre": "15–20", "20–24 Jahre": "17–22", "25–29 Jahre": "18–22",
+        "30–34 Jahre": "18–22", "35–44 Jahre": "16–20", "45–54 Jahre": "12–16",
+        "55–64 Jahre": "8–11", "65–69 Jahre": "6–9", "70–74 Jahre": "5–7",
+        "75–79 Jahre": "3–5", "80–84 Jahre": "2–3", "85–89 Jahre": "1"
+      }
+    },
+    {
+      "awp": 2, "pr": 0,
+      "rohwerte": {
+        "16–17 Jahre": "8–12", "18–19 Jahre": "9–14", "20–24 Jahre": "11–16", "25–29 Jahre": "13–17",
+        "30–34 Jahre": "13–17", "35–44 Jahre": "11–15", "45–54 Jahre": "8–11",
+        "55–64 Jahre": "4–7", "65–69 Jahre": "2–5", "70–74 Jahre": "2–4",
+        "75–79 Jahre": "1–2", "80–84 Jahre": "1", "85–89 Jahre": "0"
+      }
+    },
+    {
+      "awp": 1, "pr": 0,
+      "rohwerte": {
+        "16–17 Jahre": "0–7", "18–19 Jahre": "0–8", "20–24 Jahre": "0–10", "25–29 Jahre": "0–12",
+        "30–34 Jahre": "0–12", "35–44 Jahre": "0–10", "45–54 Jahre": "0–7",
+        "55–64 Jahre": "0–3", "65–69 Jahre": "0–1", "70–74 Jahre": "0–1",
+        "75–79 Jahre": "0", "80–84 Jahre": "0", "85–89 Jahre": null
+      }
+    }
+  ]
+}

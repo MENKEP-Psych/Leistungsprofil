@@ -1,0 +1,138 @@
+{
+  "meta": {
+    "test": "Verbaler Lern- und Merkfähigkeitstest (VLMT)",
+    "einheit": "Rohwerte",
+    "spalten": {
+      "Dg1": "Durchgang 1 (erster Abrufdurchgang)",
+      "Dg5": "Durchgang 5 (letzter Lerndurchgang)",
+      "sumDg1_5": "Summe Durchgänge 1–5 (Gesamtlernleistung)",
+      "Dg6": "Durchgang 6 (Abruf nach Interferenzliste)",
+      "Dg7": "Durchgang 7 (Delayed Recall nach ca. 30 min)",
+      "Dg5_Dg6": "Differenz Dg5 minus Dg6 (Interferenzempfindlichkeit)",
+      "Dg5_Dg7": "Differenz Dg5 minus Dg7 (Verlustrate Langzeitgedächtnis)",
+      "I": "Intrusion (Interferenzliste)",
+      "W": "Wiedererkennungsleistung (Treffer)",
+      "W_F": "Wiedererkennungsdiskriminabilität (Treffer minus Falschpositive)",
+      "FP": "Falschpositive Reaktionen",
+      "P": "Perseverationen",
+      "In": "Intrusionen gesamt"
+    },
+    "hinweis_lookup": "Für Gedächtnisparameter (Dg1, Dg5, Summe, Dg6, Dg7, W, W-F): höhere Werte = bessere Leistung → PR entspricht dem höchsten PR-Wert, dessen Tabellenwert ≤ Rohwert. Für Differenz- und Fehlerwerte (Dg5-Dg6, Dg5-Dg7, FP, P, In): niedrigere Werte = besser → umgekehrte Lookup-Logik.",
+    "hinweis_datenpruefung": "Tabelle 34 (15–29 J.), PR 85, Spalte Dg1: Wert '0' scheint Druckfehler im Original (vermutlich '9'). Im JSON als null markiert.",
+    "quellen": [
+      "Tabelle 34: Altersgruppe 3 (15–29 Jahre), n=136",
+      "Tabelle 35: Altersgruppe 4 (30–49 Jahre), n=89",
+      "Tabelle 36: Altersgruppe 5 (≥50 Jahre), n=51"
+    ]
+  },
+  "altersgruppen": [
+    {
+      "label": "15–29 Jahre",
+      "tabelle": 34,
+      "altersgruppe": 3,
+      "von": 15,
+      "bis": 29,
+      "n": {
+        "Dg1": 136, "Dg5": 136, "sumDg1_5": 136,
+        "Dg6": 136, "Dg7": 136, "Dg5_Dg6": 136, "Dg5_Dg7": 136,
+        "I": 136, "W": 134, "W_F": 7,
+        "FP": 66, "P": 136, "In": 66
+      },
+      "normen": [
+        { "pr": "<5",  "Dg1": "<4",  "Dg5": "<10", "sumDg1_5": "<40",   "Dg6": "<9",  "Dg7": "<8",  "Dg5_Dg6": ">4",  "Dg5_Dg7": ">5",   "I": "<4",  "W": "<12", "W_F": null, "FP": ">8", "P": ">9", "In": ">3" },
+        { "pr": 5,    "Dg1": 4,     "Dg5": 10,    "sumDg1_5": "40–42", "Dg6": 9,     "Dg7": 8,     "Dg5_Dg6": 4,     "Dg5_Dg7": 5,      "I": 4,     "W": 12,    "W_F": null, "FP": 8,    "P": 9,    "In": 3    },
+        { "pr": 10,   "Dg1": 5,     "Dg5": 11,    "sumDg1_5": "43–45", "Dg6": 9,     "Dg7": 9,     "Dg5_Dg6": 3,     "Dg5_Dg7": 4,      "I": 5,     "W": 13,    "W_F": null, "FP": 5,    "P": 8,    "In": 1    },
+        { "pr": 15,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": "46–49", "Dg6": 10,    "Dg7": 10,    "Dg5_Dg6": 3,     "Dg5_Dg7": 3,      "I": 5,     "W": 13,    "W_F": null, "FP": 4,    "P": 6,    "In": 1    },
+        { "pr": 20,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": 50,      "Dg6": 10,    "Dg7": 10,    "Dg5_Dg6": 3,     "Dg5_Dg7": 3,      "I": 6,     "W": 14,    "W_F": null, "FP": 3,    "P": 5,    "In": 1    },
+        { "pr": 25,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": 51,      "Dg6": 11,    "Dg7": 11,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 6,     "W": 14,    "W_F": null, "FP": 2,    "P": 4,    "In": 1    },
+        { "pr": 30,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 52,      "Dg6": 11,    "Dg7": 11,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 6,     "W": 14,    "W_F": null, "FP": 2,    "P": 3,    "In": 0    },
+        { "pr": 35,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 53,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 7,     "W": 14,    "W_F": null, "FP": 1,    "P": 3,    "In": 0    },
+        { "pr": 40,   "Dg1": 7,     "Dg5": 13,    "sumDg1_5": 54,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 2,     "Dg5_Dg7": 1,      "I": 7,     "W": 14,    "W_F": null, "FP": 1,    "P": 1,    "In": 0    },
+        { "pr": 45,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 55,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 7,     "W": 14,    "W_F": null, "FP": 1,    "P": 1,    "In": 0    },
+        { "pr": 50,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 56,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 7,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 55,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 57,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 7,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 60,   "Dg1": 8,     "Dg5": 14,    "sumDg1_5": 58,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 1,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 65,   "Dg1": 8,     "Dg5": 14,    "sumDg1_5": 59,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 70,   "Dg1": 8,     "Dg5": 15,    "sumDg1_5": 60,      "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 75,   "Dg1": 8,     "Dg5": 15,    "sumDg1_5": 61,      "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 80,   "Dg1": 9,     "Dg5": 15,    "sumDg1_5": 62,      "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 85,   "Dg1": 9,  "Dg5": 15,    "sumDg1_5": 63,      "Dg6": 15,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 9,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0},
+        { "pr": 90,   "Dg1": 10,    "Dg5": 15,    "sumDg1_5": "64–66", "Dg6": 15,    "Dg7": 15,    "Dg5_Dg6": -1,    "Dg5_Dg7": -1,     "I": 10,    "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 95,   "Dg1": 11,    "Dg5": 15,    "sumDg1_5": "67–69", "Dg6": 15,    "Dg7": 15,    "Dg5_Dg6": -1,    "Dg5_Dg7": -1,     "I": 10,    "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": ">95", "Dg1": ">11", "Dg5": 15,   "sumDg1_5": ">69",   "Dg6": 15,    "Dg7": 15,    "Dg5_Dg6": "<-1", "Dg5_Dg7": "<-1",  "I": ">10", "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    }
+      ]
+    },
+    {
+      "label": "30–49 Jahre",
+      "tabelle": 35,
+      "altersgruppe": 4,
+      "von": 30,
+      "bis": 49,
+      "n": {
+        "Dg1": 89, "Dg5": 89, "sumDg1_5": 89,
+        "Dg6": 89, "Dg7": 88, "Dg5_Dg6": 88, "Dg5_Dg7": 89,
+        "I": 89, "W": 88, "W_F": 17,
+        "FP": 42, "P": 71, "In": 42
+      },
+      "normen": [
+        { "pr": "<5",  "Dg1": "<4",  "Dg5": "<9",  "sumDg1_5": "<38",   "Dg6": "<7",  "Dg7": "<7",  "Dg5_Dg6": ">5",  "Dg5_Dg7": ">4",   "I": "<4",  "W": "<11", "W_F": null, "FP": ">4", "P": ">12", "In": ">3" },
+        { "pr": 5,    "Dg1": 4,     "Dg5": 9,     "sumDg1_5": "38–40", "Dg6": 7,     "Dg7": 7,     "Dg5_Dg6": 5,     "Dg5_Dg7": 4,      "I": 4,     "W": 11,    "W_F": null, "FP": 4,    "P": 12,   "In": 3    },
+        { "pr": 10,   "Dg1": 4,     "Dg5": 10,    "sumDg1_5": "41–43", "Dg6": 8,     "Dg7": 8,     "Dg5_Dg6": 4,     "Dg5_Dg7": 4,      "I": 4,     "W": 12,    "W_F": null, "FP": 4,    "P": 9,    "In": 2    },
+        { "pr": 15,   "Dg1": 5,     "Dg5": 11,    "sumDg1_5": "44–45", "Dg6": 9,     "Dg7": 9,     "Dg5_Dg6": 3,     "Dg5_Dg7": 3,      "I": 5,     "W": 13,    "W_F": null, "FP": 3,    "P": 7,    "In": 2    },
+        { "pr": 20,   "Dg1": 5,     "Dg5": 11,    "sumDg1_5": 46,      "Dg6": 9,     "Dg7": 9,     "Dg5_Dg6": 3,     "Dg5_Dg7": 3,      "I": 5,     "W": 13,    "W_F": null, "FP": 3,    "P": 6,    "In": 1    },
+        { "pr": 25,   "Dg1": 5,     "Dg5": 12,    "sumDg1_5": 47,      "Dg6": 10,    "Dg7": 10,    "Dg5_Dg6": 3,     "Dg5_Dg7": 2,      "I": 5,     "W": 13,    "W_F": null, "FP": 2,    "P": 4,    "In": 1    },
+        { "pr": 30,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": 48,      "Dg6": 10,    "Dg7": 10,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 6,     "W": 13,    "W_F": null, "FP": 2,    "P": 3,    "In": 1    },
+        { "pr": 35,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": 49,      "Dg6": 11,    "Dg7": 11,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 6,     "W": 14,    "W_F": null, "FP": 2,    "P": 3,    "In": 0    },
+        { "pr": 40,   "Dg1": 6,     "Dg5": 12,    "sumDg1_5": 50,      "Dg6": 11,    "Dg7": 11,    "Dg5_Dg6": 2,     "Dg5_Dg7": 2,      "I": 6,     "W": 14,    "W_F": null, "FP": 2,    "P": 2,    "In": 0    },
+        { "pr": 45,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 51,      "Dg6": 11,    "Dg7": 11,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": null, "FP": 1,    "P": 2,    "In": 0    },
+        { "pr": 50,   "Dg1": 7,     "Dg5": 13,    "sumDg1_5": 52,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": null, "FP": 1,    "P": 1,    "In": 0    },
+        { "pr": 55,   "Dg1": 7,     "Dg5": 13,    "sumDg1_5": 53,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": null, "FP": 1,    "P": 0,    "In": 0    },
+        { "pr": 60,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 54,      "Dg6": 12,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 7,     "W": 14,    "W_F": null, "FP": 1,    "P": 0,    "In": 0    },
+        { "pr": 65,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 55,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 7,     "W": 15,    "W_F": null, "FP": 1,    "P": 0,    "In": 0    },
+        { "pr": 70,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 56,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 7,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 75,   "Dg1": 8,     "Dg5": 14,    "sumDg1_5": 57,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 80,   "Dg1": 8,     "Dg5": 15,    "sumDg1_5": "58–59", "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 85,   "Dg1": 9,     "Dg5": 15,    "sumDg1_5": "60–61", "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 8,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 90,   "Dg1": 10,    "Dg5": 15,    "sumDg1_5": "62–64", "Dg6": 14,    "Dg7": 15,    "Dg5_Dg6": 0,     "Dg5_Dg7": -1,     "I": 9,     "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": 95,   "Dg1": 11,    "Dg5": 15,    "sumDg1_5": "65–67", "Dg6": 15,    "Dg7": 15,    "Dg5_Dg6": -1,    "Dg5_Dg7": -1,     "I": 10,    "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    },
+        { "pr": ">95", "Dg1": ">11", "Dg5": 15,   "sumDg1_5": ">67",   "Dg6": 15,    "Dg7": 15,    "Dg5_Dg6": "<-1", "Dg5_Dg7": "<-1",  "I": ">10", "W": 15,    "W_F": null, "FP": 0,    "P": 0,    "In": 0    }
+      ]
+    },
+    {
+      "label": "≥50 Jahre",
+      "tabelle": 36,
+      "altersgruppe": 5,
+      "von": 50,
+      "bis": null,
+      "n": {
+        "Dg1": 51, "Dg5": 51, "sumDg1_5": 51,
+        "Dg6": 51, "Dg7": 51, "Dg5_Dg6": 51, "Dg5_Dg7": 51,
+        "I": 50, "W": 51, "W_F": 46,
+        "FP": 2, "P": 5, "In": 2
+      },
+      "normen": [
+        { "pr": "<5",  "Dg1": "<3",  "Dg5": "<7",  "sumDg1_5": "<31",   "Dg6": "<6",  "Dg7": "<6",  "Dg5_Dg6": ">5",  "Dg5_Dg7": ">5",   "I": 4,     "W": "<8",  "W_F": "<6", "FP": null, "P": null, "In": null },
+        { "pr": 5,    "Dg1": 3,     "Dg5": 7,     "sumDg1_5": 31,      "Dg6": 6,     "Dg7": 6,     "Dg5_Dg6": 5,     "Dg5_Dg7": 5,      "I": 4,     "W": 8,     "W_F": 6,    "FP": null, "P": null, "In": null },
+        { "pr": 10,   "Dg1": 3,     "Dg5": 8,     "sumDg1_5": 32,      "Dg6": 6,     "Dg7": 6,     "Dg5_Dg6": 4,     "Dg5_Dg7": 4,      "I": 4,     "W": 10,    "W_F": "7–8","FP": null, "P": null, "In": null },
+        { "pr": 15,   "Dg1": 4,     "Dg5": 9,     "sumDg1_5": "33–34", "Dg6": 7,     "Dg7": 7,     "Dg5_Dg6": 4,     "Dg5_Dg7": 3,      "I": 4,     "W": 11,    "W_F": 9,    "FP": null, "P": null, "In": null },
+        { "pr": 20,   "Dg1": 4,     "Dg5": 10,    "sumDg1_5": "35–38", "Dg6": 8,     "Dg7": 7,     "Dg5_Dg6": 3,     "Dg5_Dg7": 3,      "I": 4,     "W": 12,    "W_F": 10,   "FP": null, "P": null, "In": null },
+        { "pr": 25,   "Dg1": 4,     "Dg5": 10,    "sumDg1_5": "39–40", "Dg6": 8,     "Dg7": 8,     "Dg5_Dg6": 3,     "Dg5_Dg7": 2,      "I": 4,     "W": 13,    "W_F": 11,   "FP": null, "P": null, "In": null },
+        { "pr": 30,   "Dg1": 5,     "Dg5": 11,    "sumDg1_5": "41–43", "Dg6": 9,     "Dg7": 9,     "Dg5_Dg6": 2,     "Dg5_Dg7": 1,      "I": 4,     "W": 13,    "W_F": 11,   "FP": null, "P": null, "In": null },
+        { "pr": 35,   "Dg1": 5,     "Dg5": 11,    "sumDg1_5": 44,      "Dg6": 9,     "Dg7": 9,     "Dg5_Dg6": 2,     "Dg5_Dg7": 1,      "I": 4,     "W": 13,    "W_F": 12,   "FP": null, "P": null, "In": null },
+        { "pr": 40,   "Dg1": 5,     "Dg5": 12,    "sumDg1_5": "45–47", "Dg6": 9,     "Dg7": 10,    "Dg5_Dg6": 2,     "Dg5_Dg7": 1,      "I": 5,     "W": 13,    "W_F": 13,   "FP": null, "P": null, "In": null },
+        { "pr": 45,   "Dg1": 5,     "Dg5": 12,    "sumDg1_5": 48,      "Dg6": 10,    "Dg7": 10,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 5,     "W": 13,    "W_F": 13,   "FP": null, "P": null, "In": null },
+        { "pr": 50,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 49,      "Dg6": 10,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 55,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 50,      "Dg6": 11,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 60,   "Dg1": 6,     "Dg5": 13,    "sumDg1_5": 50,      "Dg6": 11,    "Dg7": 12,    "Dg5_Dg6": 1,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 65,   "Dg1": 6,     "Dg5": 14,    "sumDg1_5": "51–52", "Dg6": 12,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 1,      "I": 6,     "W": 14,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 70,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": "53–54", "Dg6": 12,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 6,     "W": 14,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 75,   "Dg1": 7,     "Dg5": 14,    "sumDg1_5": 55,      "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 7,     "W": 15,    "W_F": 14,   "FP": null, "P": null, "In": null },
+        { "pr": 80,   "Dg1": 7,     "Dg5": 15,    "sumDg1_5": "56–57", "Dg6": 13,    "Dg7": 13,    "Dg5_Dg6": 0,     "Dg5_Dg7": 0,      "I": 7,     "W": 15,    "W_F": 15,   "FP": null, "P": null, "In": null },
+        { "pr": 85,   "Dg1": 7,     "Dg5": 15,    "sumDg1_5": "58–59", "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": 0,     "Dg5_Dg7": -1,     "I": 8,     "W": 15,    "W_F": 15,   "FP": null, "P": null, "In": null },
+        { "pr": 90,   "Dg1": 8,     "Dg5": 15,    "sumDg1_5": 60,      "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": -1,    "Dg5_Dg7": -2,     "I": 8,     "W": 15,    "W_F": 15,   "FP": null, "P": null, "In": null },
+        { "pr": 95,   "Dg1": 8,     "Dg5": 15,    "sumDg1_5": "61–62", "Dg6": 14,    "Dg7": 14,    "Dg5_Dg6": -1,    "Dg5_Dg7": "-3–-4", "I": 9,    "W": 15,    "W_F": 15,   "FP": null, "P": null, "In": null },
+        { "pr": ">95", "Dg1": ">8",  "Dg5": 15,   "sumDg1_5": ">62",   "Dg6": ">14", "Dg7": ">14", "Dg5_Dg6": "<-1", "Dg5_Dg7": "<-4",  "I": ">9",  "W": 15,    "W_F": 15,   "FP": null, "P": null, "In": null }
+      ]
+    }
+  ]
+}

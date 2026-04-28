@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+dist-electron/
+release/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Sensible Laufzeitdateien – niemals einchecken
+firebase-applet-config.json
+FIRST-RUN-CREDENTIALS.txt
+*.sqlite
+*.sqlite.key
+*.sqlite.recovery

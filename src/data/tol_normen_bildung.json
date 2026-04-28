@@ -1,0 +1,357 @@
+{
+  "meta": {
+    "test": "Turm von London (TOL)",
+    "normset": "Bildungsspezifische Normtabellen",
+    "titel": "Bildungsspezifische Normtabellen (Erwachsene)",
+    "tabellen": [29, 30, 31],
+    "einheit": "Anzahl gelöster Probleme (Rohwert, max. 20)",
+    "hinweis": "Höhere Werte = bessere Leistung. PR-Lookup: Rohwert liegt bei oder über dem Tabellenwert → PR entspricht dieser Zeile.",
+    "quelle": "Tabellen 29–31 aus dem TOL-Testmanual",
+    "bildungsgruppen_definition": {
+      "bis_9J": "bis zu 9 Bildungsjahre",
+      "10_12J": "10 bis 12 Bildungsjahre",
+      "ab_13J": "13 und mehr Bildungsjahre"
+    }
+  },
+  "bildungsgruppen": [
+    {
+      "label": "bis zu 9 Bildungsjahre",
+      "bildungsjahre_von": 0,
+      "bildungsjahre_bis": 9,
+      "tabelle": 29,
+      "n_gesamt": 319,
+      "altersgruppen": [
+        {
+          "label": "18–29 Jahre",
+          "von": 18,
+          "bis": 29,
+          "n": 43,
+          "normen": [
+            { "rohwert": 12, "pr": 5 },
+            { "rohwert": 13, "pr": 14 },
+            { "rohwert": 14, "pr": 19 },
+            { "rohwert": 15, "pr": 37 },
+            { "rohwert": 16, "pr": 61 },
+            { "rohwert": 17, "pr": 84 },
+            { "rohwert": 18, "pr": 93 },
+            { "rohwert": 19, "pr": 98 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "30–41 Jahre",
+          "von": 30,
+          "bis": 41,
+          "n": 51,
+          "normen": [
+            { "rohwert": 13, "pr": 4 },
+            { "rohwert": 14, "pr": 16 },
+            { "rohwert": 15, "pr": 49 },
+            { "rohwert": 16, "pr": 57 },
+            { "rohwert": 17, "pr": 69 },
+            { "rohwert": 18, "pr": 77 },
+            { "rohwert": 19, "pr": 92 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "42–53 Jahre",
+          "von": 42,
+          "bis": 53,
+          "n": 63,
+          "normen": [
+            { "rohwert": 12, "pr": 5 },
+            { "rohwert": 13, "pr": 18 },
+            { "rohwert": 14, "pr": 30 },
+            { "rohwert": 15, "pr": 46 },
+            { "rohwert": 16, "pr": 78 },
+            { "rohwert": 17, "pr": 94 },
+            { "rohwert": 18, "pr": 99 }
+          ]
+        },
+        {
+          "label": "54–65 Jahre",
+          "von": 54,
+          "bis": 65,
+          "n": 80,
+          "normen": [
+            { "rohwert": 9,  "pr": 6 },
+            { "rohwert": 10, "pr": 10 },
+            { "rohwert": 11, "pr": 15 },
+            { "rohwert": 12, "pr": 33 },
+            { "rohwert": 13, "pr": 40 },
+            { "rohwert": 14, "pr": 60 },
+            { "rohwert": 15, "pr": 75 },
+            { "rohwert": 16, "pr": 85 },
+            { "rohwert": 17, "pr": 93 },
+            { "rohwert": 18, "pr": 95 },
+            { "rohwert": 19, "pr": 99 }
+          ]
+        },
+        {
+          "label": ">65 Jahre",
+          "von": 66,
+          "bis": null,
+          "n": 82,
+          "normen": [
+            { "rohwert": 7,  "pr": 5 },
+            { "rohwert": 8,  "pr": 7 },
+            { "rohwert": 9,  "pr": 10 },
+            { "rohwert": 10, "pr": 12 },
+            { "rohwert": 11, "pr": 15 },
+            { "rohwert": 12, "pr": 24 },
+            { "rohwert": 13, "pr": 42 },
+            { "rohwert": 14, "pr": 66 },
+            { "rohwert": 15, "pr": 78 },
+            { "rohwert": 16, "pr": 90 },
+            { "rohwert": 17, "pr": 99 }
+          ]
+        },
+        {
+          "label": "Gesamt",
+          "von": 18,
+          "bis": null,
+          "n": 319,
+          "normen": [
+            { "rohwert": 7,  "pr": 1 },
+            { "rohwert": 8,  "pr": 2 },
+            { "rohwert": 9,  "pr": 3 },
+            { "rohwert": 10, "pr": 6 },
+            { "rohwert": 11, "pr": 8 },
+            { "rohwert": 12, "pr": 16 },
+            { "rohwert": 13, "pr": 27 },
+            { "rohwert": 14, "pr": 43 },
+            { "rohwert": 15, "pr": 61 },
+            { "rohwert": 16, "pr": 77 },
+            { "rohwert": 17, "pr": 90 },
+            { "rohwert": 18, "pr": 94 },
+            { "rohwert": 19, "pr": 98 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "10 bis 12 Bildungsjahre",
+      "bildungsjahre_von": 10,
+      "bildungsjahre_bis": 12,
+      "tabelle": 30,
+      "n_gesamt": 352,
+      "altersgruppen": [
+        {
+          "label": "18–29 Jahre",
+          "von": 18,
+          "bis": 29,
+          "n": 109,
+          "normen": [
+            { "rohwert": 12, "pr": 2 },
+            { "rohwert": 13, "pr": 6 },
+            { "rohwert": 14, "pr": 13 },
+            { "rohwert": 15, "pr": 31 },
+            { "rohwert": 16, "pr": 50 },
+            { "rohwert": 17, "pr": 65 },
+            { "rohwert": 18, "pr": 87 },
+            { "rohwert": 19, "pr": 98 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "30–41 Jahre",
+          "von": 30,
+          "bis": 41,
+          "n": 67,
+          "normen": [
+            { "rohwert": 13, "pr": 3 },
+            { "rohwert": 14, "pr": 9 },
+            { "rohwert": 15, "pr": 18 },
+            { "rohwert": 16, "pr": 43 },
+            { "rohwert": 17, "pr": 64 },
+            { "rohwert": 18, "pr": 82 },
+            { "rohwert": 19, "pr": 91 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "42–53 Jahre",
+          "von": 42,
+          "bis": 53,
+          "n": 89,
+          "normen": [
+            { "rohwert": 12, "pr": 6 },
+            { "rohwert": 13, "pr": 15 },
+            { "rohwert": 14, "pr": 30 },
+            { "rohwert": 15, "pr": 44 },
+            { "rohwert": 16, "pr": 60 },
+            { "rohwert": 17, "pr": 80 },
+            { "rohwert": 18, "pr": 91 },
+            { "rohwert": 19, "pr": 99 }
+          ]
+        },
+        {
+          "label": "54–65 Jahre",
+          "von": 54,
+          "bis": 65,
+          "n": 37,
+          "normen": [
+            { "rohwert": 11, "pr": 5 },
+            { "rohwert": 12, "pr": 11 },
+            { "rohwert": 13, "pr": 22 },
+            { "rohwert": 14, "pr": 27 },
+            { "rohwert": 15, "pr": 41 },
+            { "rohwert": 16, "pr": 68 },
+            { "rohwert": 17, "pr": 73 },
+            { "rohwert": 18, "pr": 89 },
+            { "rohwert": 19, "pr": 99 }
+          ]
+        },
+        {
+          "label": ">65 Jahre",
+          "von": 66,
+          "bis": null,
+          "n": 50,
+          "normen": [
+            { "rohwert": 10, "pr": 4 },
+            { "rohwert": 11, "pr": 10 },
+            { "rohwert": 12, "pr": 16 },
+            { "rohwert": 13, "pr": 24 },
+            { "rohwert": 14, "pr": 28 },
+            { "rohwert": 15, "pr": 52 },
+            { "rohwert": 16, "pr": 72 },
+            { "rohwert": 17, "pr": 80 },
+            { "rohwert": 18, "pr": 92 },
+            { "rohwert": 19, "pr": 96 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "Gesamt",
+          "von": 18,
+          "bis": null,
+          "n": 352,
+          "normen": [
+            { "rohwert": 11, "pr": 1 },
+            { "rohwert": 12, "pr": 5 },
+            { "rohwert": 13, "pr": 12 },
+            { "rohwert": 14, "pr": 20 },
+            { "rohwert": 15, "pr": 36 },
+            { "rohwert": 16, "pr": 56 },
+            { "rohwert": 17, "pr": 72 },
+            { "rohwert": 18, "pr": 88 },
+            { "rohwert": 19, "pr": 97 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "13 und mehr Bildungsjahre",
+      "bildungsjahre_von": 13,
+      "bildungsjahre_bis": null,
+      "tabelle": 31,
+      "n_gesamt": 592,
+      "altersgruppen": [
+        {
+          "label": "18–29 Jahre",
+          "von": 18,
+          "bis": 29,
+          "n": 413,
+          "normen": [
+            { "rohwert": 11, "pr": 1 },
+            { "rohwert": 12, "pr": 2 },
+            { "rohwert": 13, "pr": 5 },
+            { "rohwert": 14, "pr": 10 },
+            { "rohwert": 15, "pr": 17 },
+            { "rohwert": 16, "pr": 28 },
+            { "rohwert": 17, "pr": 47 },
+            { "rohwert": 18, "pr": 72 },
+            { "rohwert": 19, "pr": 90 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "30–41 Jahre",
+          "von": 30,
+          "bis": 41,
+          "n": 77,
+          "normen": [
+            { "rohwert": 15, "pr": 13 },
+            { "rohwert": 16, "pr": 31 },
+            { "rohwert": 17, "pr": 52 },
+            { "rohwert": 18, "pr": 70 },
+            { "rohwert": 19, "pr": 83 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "42–53 Jahre",
+          "von": 42,
+          "bis": 53,
+          "n": 49,
+          "normen": [
+            { "rohwert": 11, "pr": 8 },
+            { "rohwert": 12, "pr": 9 },
+            { "rohwert": 13, "pr": 10 },
+            { "rohwert": 14, "pr": 12 },
+            { "rohwert": 15, "pr": 25 },
+            { "rohwert": 16, "pr": 53 },
+            { "rohwert": 17, "pr": 74 },
+            { "rohwert": 18, "pr": 86 },
+            { "rohwert": 19, "pr": 98 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        },
+        {
+          "label": "54–65 Jahre",
+          "von": 54,
+          "bis": 65,
+          "n": 40,
+          "normen": [
+            { "rohwert": 10, "pr": 5 },
+            { "rohwert": 11, "pr": 8 },
+            { "rohwert": 12, "pr": 11 },
+            { "rohwert": 13, "pr": 14 },
+            { "rohwert": 14, "pr": 17 },
+            { "rohwert": 15, "pr": 20 },
+            { "rohwert": 16, "pr": 65 },
+            { "rohwert": 17, "pr": 73 },
+            { "rohwert": 18, "pr": 80 },
+            { "rohwert": 19, "pr": 99 }
+          ]
+        },
+        {
+          "label": ">65 Jahre",
+          "von": 66,
+          "bis": null,
+          "n": 13,
+          "normen": [
+            { "rohwert": 12, "pr": 15 },
+            { "rohwert": 13, "pr": 31 },
+            { "rohwert": 14, "pr": 46 },
+            { "rohwert": 15, "pr": 62 },
+            { "rohwert": 16, "pr": 70 },
+            { "rohwert": 17, "pr": 77 },
+            { "rohwert": 18, "pr": 99 }
+          ]
+        },
+        {
+          "label": "Gesamt",
+          "von": 18,
+          "bis": null,
+          "n": 592,
+          "normen": [
+            { "rohwert": 11, "pr": 1 },
+            { "rohwert": 12, "pr": 3 },
+            { "rohwert": 13, "pr": 5 },
+            { "rohwert": 14, "pr": 9 },
+            { "rohwert": 15, "pr": 18 },
+            { "rohwert": 16, "pr": 33 },
+            { "rohwert": 17, "pr": 52 },
+            { "rohwert": 18, "pr": 74 },
+            { "rohwert": 19, "pr": 91 },
+            { "rohwert": 20, "pr": 99 }
+          ]
+        }
+      ]
+    }
+  ]
+}
