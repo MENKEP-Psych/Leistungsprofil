@@ -65,7 +65,7 @@ Diese drei Dateien in den Server-Ordner kopieren:
 
 ### Portable EXE kopieren
 
-Die Datei `Leistungsprofil-X.X.X-portable.exe` (wird vom Entwickler bereitgestellt) auf jeden Rechner kopieren, z.B.:
+Die Datei `Leistungsprofil-X.X.X-portable.exe` (aktuellste Version in releases zu finden) auf jeden Rechner kopieren, z.B.:
 
 ```
 C:\Leistungsprofil\Leistungsprofil.exe
