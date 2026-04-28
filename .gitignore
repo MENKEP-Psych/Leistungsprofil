@@ -15,3 +15,8 @@ FIRST-RUN-CREDENTIALS.txt
 *.sqlite
 *.sqlite.key
 *.sqlite.recovery
+firebase-applet-config.json
+FIRST-RUN-CREDENTIALS.txt
+*.sqlite
+*.key
+*.recovery
