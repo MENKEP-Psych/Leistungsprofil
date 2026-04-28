@@ -57,7 +57,7 @@ Diese drei Dateien in den Server-Ordner kopieren:
 |---|---|
 | `leistungsprofil.sqlite` | Alle App-Nutzer: Lesen + Schreiben |
 | `leistungsprofil.sqlite.key` | Alle App-Nutzer: Lesen |
-| `leistungsprofil.sqlite.recovery` | Nur Admins: Lesen (enthält Notfall-Code) |
+| `leistungsprofil.sqlite.recovery` | Nur Admins: Lesen (enthält Notfall-Code, der als Passwort für account 'recovery' dient) |
 
 ---
 
