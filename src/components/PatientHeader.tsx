@@ -85,6 +85,11 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, onEdit, o
                 <span className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 font-medium">
                   <Stethoscope size={12} />
                   {patient.diagnose}
+                  {patient.lokalisation && (
+                    <span className="text-violet-400 dark:text-violet-500 font-normal">
+                      · {patient.lokalisation}
+                    </span>
+                  )}
                 </span>
               ) : (
                 <button

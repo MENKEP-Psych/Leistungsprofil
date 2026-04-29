@@ -1,9 +1,9 @@
 import { TestResult } from '../types';
 
 export interface SymbolCount {
-  above: number;   // PR > 71.4
-  average: number; // PR 28.6–71.4
-  below: number;   // PR < 28.6
+  above: number;   // PR > 84.13
+  average: number; // PR 15.87–84.13
+  below: number;   // PR < 15.87
 }
 
 // Parse a PR value (number or string like "<5", ">95", "15-35") to a number for classification
@@ -37,8 +37,8 @@ function prToNumber(pr: number | string): number | null {
 }
 
 function classify(pr: number): 'above' | 'average' | 'below' {
-  if (pr > 71.4) return 'above';
-  if (pr < 28.6) return 'below';
+  if (pr > 84.13) return 'above';
+  if (pr < 15.87) return 'below';
   return 'average';
 }
 

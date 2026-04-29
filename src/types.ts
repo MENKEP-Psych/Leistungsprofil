@@ -10,6 +10,7 @@ export interface Patient {
   aufnahmedatum?: string; // YYYY-MM-DD
   entlassdatum?: string;  // YYYY-MM-DD
   diagnose?: string;
+  lokalisation?: string;
   createdBy?: string;
 }
 

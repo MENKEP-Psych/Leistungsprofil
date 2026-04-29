@@ -9,6 +9,7 @@ export interface RawPatient {
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
+  encryptedLokalisation: string | null;
   status: string;
   createdBy: string | null;
   createdAt: number;
@@ -41,6 +42,7 @@ export interface PatientCreatePayload {
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
+  encryptedLokalisation: string | null;
   encryptedGeneralNote: string;
   createdBy: string | null;
 }
@@ -54,6 +56,7 @@ export interface PatientUpdatePayload {
   encryptedAufnahmedatum?: string | null;
   encryptedEntlassdatum?: string | null;
   encryptedDiagnose?: string | null;
+  encryptedLokalisation?: string | null;
   status?: string;
 }
 

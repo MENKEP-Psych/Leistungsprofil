@@ -80,6 +80,9 @@ export async function fetchPatient(
     diagnose: row.encryptedDiagnose
       ? (decryptData(row.encryptedDiagnose, encryptionKey) as string) || undefined
       : undefined,
+    lokalisation: row.encryptedLokalisation
+      ? (decryptData(row.encryptedLokalisation, encryptionKey) as string) || undefined
+      : undefined,
     status: row.status as 'aktiv' | 'entlassen',
     age: calculateAge((decryptData(row.encryptedGeburtsdatum, encryptionKey) as string) || '', sorted[0]?.date),
     createdBy: row.createdBy ?? undefined,
@@ -103,6 +106,7 @@ export async function dbCreatePatient(p: Patient, encryptionKey: string, created
     encryptedAufnahmedatum: p.aufnahmedatum ? encryptData(p.aufnahmedatum, encryptionKey) as string : null,
     encryptedEntlassdatum: p.entlassdatum ? encryptData(p.entlassdatum, encryptionKey) as string : null,
     encryptedDiagnose: p.diagnose ? encryptData(p.diagnose, encryptionKey) as string : null,
+    encryptedLokalisation: p.lokalisation ? encryptData(p.lokalisation, encryptionKey) as string : null,
     encryptedGeneralNote: encryptData('', encryptionKey) as string,
     createdBy,
   };
@@ -113,7 +117,7 @@ export async function dbCreatePatient(p: Patient, encryptionKey: string, created
 
 export async function dbUpdatePatient(
   id: string,
-  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose'>>,
+  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>,
   encryptionKey: string
 ): Promise<boolean> {
   if (!isElectron()) return updatePatientLocal(id, updates);
@@ -127,6 +131,7 @@ export async function dbUpdatePatient(
   if ('aufnahmedatum' in updates) payload.encryptedAufnahmedatum = updates.aufnahmedatum ? encryptData(updates.aufnahmedatum, encryptionKey) as string : null;
   if ('entlassdatum' in updates) payload.encryptedEntlassdatum = updates.entlassdatum ? encryptData(updates.entlassdatum, encryptionKey) as string : null;
   if ('diagnose' in updates) payload.encryptedDiagnose = updates.diagnose ? encryptData(updates.diagnose, encryptionKey) as string : null;
+  if ('lokalisation' in updates) payload.encryptedLokalisation = updates.lokalisation ? encryptData(updates.lokalisation, encryptionKey) as string : null;
 
   return getElectronAPI().updatePatient(id, payload);
 }

@@ -165,7 +165,7 @@ export function usePatientData(id: string | null) {
   };
 
   const updatePatient = async (
-    updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose'>>
+    updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>
   ): Promise<boolean> => {
     if (!patient || !id || !encryptionKey) return false;
 
