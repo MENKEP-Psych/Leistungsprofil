@@ -57,7 +57,7 @@ Diese drei Dateien in den Server-Ordner kopieren:
 |---|---|
 | `leistungsprofil.sqlite` | Alle App-Nutzer: Lesen + Schreiben |
 | `leistungsprofil.sqlite.key` | Alle App-Nutzer: Lesen |
-| `leistungsprofil.sqlite.recovery` | Nur Admins: Lesen (enthält Notfall-Code) |
+| `leistungsprofil.sqlite.recovery` | Nur Admins: Lesen (enthält Notfall-Code, der als Passwort für account 'recovery' dient) |
 
 ---
 
@@ -65,7 +65,7 @@ Diese drei Dateien in den Server-Ordner kopieren:
 
 ### Portable EXE kopieren
 
-Die Datei `Leistungsprofil-X.X.X-portable.exe` (wird vom Entwickler bereitgestellt) auf jeden Rechner kopieren, z.B.:
+Die Datei `Leistungsprofil-X.X.X-portable.exe` (aktuellste Version in releases zu finden) auf jeden Rechner kopieren, z.B.:
 
 ```
 C:\Leistungsprofil\Leistungsprofil.exe
@@ -185,13 +185,4 @@ Erzeugt in `release/`:
 - `Leistungsprofil-X.X.X-portable.exe` — empfohlen für Deployment (kein Installer nötig)
 - `Leistungsprofil Setup X.X.X.exe` — klassischer NSIS-Installer (braucht Admin-Rechte)
 
-### Was nicht ins Repository gehört
 
-Folgende Dateien sind über `.gitignore` ausgeschlossen und dürfen **niemals** eingecheckt werden:
-
-| Datei | Grund |
-|---|---|
-| `*.sqlite`, `*.key`, `*.recovery` | Patientendaten / Schlüsselmaterial |
-| `FIRST-RUN-CREDENTIALS.txt` | Zugangsdaten |
-| `.env` | Ggf. Firebase-Credentials |
-| `firebase-applet-config.json` | Firebase-Zugangsdaten |
