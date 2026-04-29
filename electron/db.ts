@@ -100,6 +100,9 @@ function createSchema(): void {
   // Migrations for new columns (safe to run on existing DBs)
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_aufnahmedatum TEXT'); } catch { /* already exists */ }
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_entlassdatum TEXT'); } catch { /* already exists */ }
+  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_diagnose TEXT'); } catch { /* already exists */ }
+  // Track when user credentials were last changed so push can sync password updates.
+  try { getDb().exec('ALTER TABLE users ADD COLUMN updated_at INTEGER NOT NULL DEFAULT (unixepoch())'); } catch { /* already exists */ }
 }
 
 function seedDefaultUsers(): void {
@@ -147,7 +150,7 @@ export function getPatients(): RawPatient[] {
   return (getDb().prepare(`
     SELECT id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
            encrypted_bildungsjahre, encrypted_neuropsychologin,
-           encrypted_aufnahmedatum, encrypted_entlassdatum,
+           encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose,
            status, created_by, created_at, updated_at
     FROM patients
     ORDER BY updated_at DESC
@@ -158,7 +161,7 @@ export function getPatient(id: string): { patient: RawPatient; results: RawTestR
   const row = getDb().prepare(`
     SELECT id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
            encrypted_bildungsjahre, encrypted_neuropsychologin,
-           encrypted_aufnahmedatum, encrypted_entlassdatum,
+           encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose,
            status, encrypted_general_note, created_by, created_at, updated_at
     FROM patients WHERE id = ?
   `).get(id) as Record<string, unknown> | undefined;
@@ -185,11 +188,11 @@ export function createPatient(data: PatientCreatePayload): boolean {
     getDb().prepare(`
       INSERT INTO patients (id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
         encrypted_bildungsjahre, encrypted_neuropsychologin,
-        encrypted_aufnahmedatum, encrypted_entlassdatum,
+        encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose,
         status, encrypted_general_note, created_by)
       VALUES (@id, @encryptedName, @encryptedGeburtsdatum, @encryptedGeschlecht,
         @encryptedBildungsjahre, @encryptedNeuropsychologin,
-        @encryptedAufnahmedatum, @encryptedEntlassdatum,
+        @encryptedAufnahmedatum, @encryptedEntlassdatum, @encryptedDiagnose,
         'aktiv', @encryptedGeneralNote, @createdBy)
     `).run({
       id: data.id,
@@ -200,6 +203,7 @@ export function createPatient(data: PatientCreatePayload): boolean {
       encryptedNeuropsychologin: data.encryptedNeuropsychologin ?? null,
       encryptedAufnahmedatum: data.encryptedAufnahmedatum ?? null,
       encryptedEntlassdatum: data.encryptedEntlassdatum ?? null,
+      encryptedDiagnose: data.encryptedDiagnose ?? null,
       encryptedGeneralNote: data.encryptedGeneralNote,
       createdBy: data.createdBy ?? null,
     });
@@ -220,6 +224,7 @@ export function updatePatient(id: string, updates: PatientUpdatePayload): boolea
   if ('encryptedNeuropsychologin' in updates) { sets.push('encrypted_neuropsychologin = @encryptedNeuropsychologin'); params.encryptedNeuropsychologin = updates.encryptedNeuropsychologin ?? null; }
   if ('encryptedAufnahmedatum' in updates) { sets.push('encrypted_aufnahmedatum = @encryptedAufnahmedatum'); params.encryptedAufnahmedatum = updates.encryptedAufnahmedatum ?? null; }
   if ('encryptedEntlassdatum' in updates) { sets.push('encrypted_entlassdatum = @encryptedEntlassdatum'); params.encryptedEntlassdatum = updates.encryptedEntlassdatum ?? null; }
+  if ('encryptedDiagnose' in updates) { sets.push('encrypted_diagnose = @encryptedDiagnose'); params.encryptedDiagnose = updates.encryptedDiagnose ?? null; }
   if (updates.status !== undefined) { sets.push('status = @status'); params.status = updates.status; }
 
   if (sets.length === 1) return true; // only updated_at, nothing to do
@@ -324,7 +329,7 @@ export function getAuditLog(): AuditRow[] {
 
 export function createUser(username: string, password: string, role: 'admin' | 'user'): { success: boolean; error?: string } {
   try {
-    getDb().prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+    getDb().prepare('INSERT INTO users (username, password_hash, role, updated_at) VALUES (?, ?, ?, unixepoch())')
       .run(username, bcrypt.hashSync(password, 10), role);
     return { success: true };
   } catch (e: unknown) {
@@ -366,7 +371,7 @@ export function getUsers(): UserRow[] {
 }
 
 export function changePassword(username: string, newPassword: string): boolean {
-  getDb().prepare('UPDATE users SET password_hash = ? WHERE username = ?')
+  getDb().prepare('UPDATE users SET password_hash = ?, updated_at = unixepoch() WHERE username = ?')
     .run(bcrypt.hashSync(newPassword, 10), username);
   return true;
 }
@@ -383,6 +388,7 @@ function rowToRawPatient(row: Record<string, unknown>): RawPatient {
     encryptedNeuropsychologin: (row.encrypted_neuropsychologin as string | null) ?? null,
     encryptedAufnahmedatum: (row.encrypted_aufnahmedatum as string | null) ?? null,
     encryptedEntlassdatum: (row.encrypted_entlassdatum as string | null) ?? null,
+    encryptedDiagnose: (row.encrypted_diagnose as string | null) ?? null,
     status: row.status as string,
     createdBy: (row.created_by as string | null) ?? null,
     createdAt: row.created_at as number,

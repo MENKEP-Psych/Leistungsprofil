@@ -19,7 +19,8 @@ function cellToNum(cell: NormCell, dir: Direction): number | null {
   const s = cell.trim();
 
   // Range: "X–Y" with en-dash (U+2013); also handles negative ranges like "-3–-4"
-  const dashIdx = s.indexOf('\u2013');
+  let dashIdx = s.indexOf('\u2013');
+  if (dashIdx < 0) dashIdx = s.indexOf('-', s.startsWith('-') ? 1 : 0);
   if (dashIdx > 0) {
     const a = parseFloat(s.slice(0, dashIdx));
     const b = parseFloat(s.slice(dashIdx + 1));

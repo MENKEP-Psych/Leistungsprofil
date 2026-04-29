@@ -8,6 +8,7 @@ export interface RawPatient {
   encryptedNeuropsychologin: string | null;
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
+  encryptedDiagnose: string | null;
   status: string;
   createdBy: string | null;
   createdAt: number;
@@ -39,6 +40,7 @@ export interface PatientCreatePayload {
   encryptedNeuropsychologin: string | null;
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
+  encryptedDiagnose: string | null;
   encryptedGeneralNote: string;
   createdBy: string | null;
 }
@@ -51,6 +53,7 @@ export interface PatientUpdatePayload {
   encryptedNeuropsychologin?: string | null;
   encryptedAufnahmedatum?: string | null;
   encryptedEntlassdatum?: string | null;
+  encryptedDiagnose?: string | null;
   status?: string;
 }
 

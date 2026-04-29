@@ -9,6 +9,7 @@ export interface Patient {
   neuropsychologin?: string;
   aufnahmedatum?: string; // YYYY-MM-DD
   entlassdatum?: string;  // YYYY-MM-DD
+  diagnose?: string;
   createdBy?: string;
 }
 

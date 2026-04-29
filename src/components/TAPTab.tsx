@@ -9,6 +9,10 @@ import { useAuth } from '../context/AuthContext';
 import { addNotification } from '../lib/notifications';
 import { QuadValues, QuadGrid, decodeQuad, encodeQuad } from './NeglectShared';
 
+// TODO: TAP-Normen als JSON einpflegen für automatische PR-Berechnung aus Rohwerten.
+// Aktuell werden PR-Werte manuell aus dem TAP-Protokollbogen abgelesen und eingetragen.
+// Normenquelle: Zimmermann & Fimm (2002/2012), TAP 2.3 Normierungsstichprobe.
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface SF {

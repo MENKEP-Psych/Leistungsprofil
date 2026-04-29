@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Pencil, X, AlertCircle, Loader2 } from 'lucide-react';
 import { Patient } from '../types';
 import { dbGetUsers } from '../lib/db-api';
+import { DIAGNOSE_OPTIONEN } from './CreatePatientModal';
 
 interface EditPatientModalProps {
   isOpen: boolean;
   patient: Patient | null;
   onClose: () => void;
-  onSave: (updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum'>>) => Promise<boolean>;
+  onSave: (updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose'>>) => Promise<boolean>;
 }
 
 const inputCls =
@@ -24,6 +25,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
   const [neuropsychologin, setNeuropsychologin] = useState('');
   const [aufnahmedatum, setAufnahmedatum] = useState('');
   const [entlassdatum, setEntlassdatum] = useState('');
+  const [diagnose, setDiagnose] = useState('');
+  const [andereText, setAndereText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<string[]>([]);
@@ -43,8 +46,31 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
       setNeuropsychologin(patient.neuropsychologin ?? '');
       setAufnahmedatum(patient.aufnahmedatum ?? '');
       setEntlassdatum(patient.entlassdatum ?? '');
+
+      // Restore diagnose state from stored value
+      const stored = patient.diagnose ?? '';
+      if (stored.startsWith('Andere: ')) {
+        setDiagnose('Andere');
+        setAndereText(stored.slice('Andere: '.length));
+      } else {
+        setDiagnose(stored);
+        setAndereText('');
+      }
     }
   }, [patient, isOpen]);
+
+  const handleDiagnoseClick = (opt: string) => {
+    if (diagnose === opt) {
+      setDiagnose('');
+    } else {
+      setDiagnose(opt);
+    }
+    if (opt !== 'Andere') setAndereText('');
+  };
+
+  const resolvedDiagnose = diagnose === 'Andere'
+    ? (andereText.trim() ? `Andere: ${andereText.trim()}` : '')
+    : diagnose;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +90,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
       neuropsychologin: neuropsychologin.trim() || undefined,
       aufnahmedatum: aufnahmedatum || undefined,
       entlassdatum: entlassdatum || undefined,
+      diagnose: resolvedDiagnose || undefined,
     });
 
     setIsSubmitting(false);
@@ -82,9 +109,9 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden"
+            className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden max-h-[90vh] flex flex-col"
           >
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-200">
                   <Pencil size={22} />
@@ -99,7 +126,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-8 space-y-5">
+            <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <label className={labelCls}>Vorname</label>
@@ -150,6 +177,35 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className={labelCls}>Aufnahmediagnose (optional)</label>
+                <div className="flex flex-wrap gap-2">
+                  {DIAGNOSE_OPTIONEN.map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => handleDiagnoseClick(opt)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        diagnose === opt
+                          ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                {diagnose === 'Andere' && (
+                  <input
+                    type="text"
+                    value={andereText}
+                    onChange={e => setAndereText(e.target.value)}
+                    placeholder="Diagnose eingeben…"
+                    className={inputCls + ' mt-2'}
+                  />
+                )}
               </div>
 
               <div className="space-y-2">

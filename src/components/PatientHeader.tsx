@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Calendar, BookOpen, Clock, Pencil, ClipboardCheck, DoorOpen, ShieldCheck, AlertTriangle, FileText, Undo2 } from 'lucide-react';
+import { User, Calendar, BookOpen, Clock, Pencil, ClipboardCheck, DoorOpen, ShieldCheck, FileText, Undo2, Stethoscope } from 'lucide-react';
 import { Patient } from '../types';
 import { formatDate } from '../lib/utils';
 
@@ -10,6 +10,7 @@ interface PatientHeaderProps {
   onUndoDischarge?: () => void;
   generalNote?: string;
   onSaveGeneralNote?: (note: string) => void;
+  onEditClick?: () => void; // alias used by nudge button
 }
 
 const GESCHLECHT_LABEL: Record<string, string> = {
@@ -79,6 +80,22 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, onEdit, o
                   <DoorOpen size={12} className="text-rose-400" />
                   Entlassung: {formatDate(patient.entlassdatum)}
                 </span>
+              )}
+              {patient.diagnose ? (
+                <span className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 font-medium">
+                  <Stethoscope size={12} />
+                  {patient.diagnose}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 font-medium hover:text-violet-500 dark:hover:text-violet-400 transition-colors group"
+                  title="Diagnose eintragen"
+                >
+                  <Stethoscope size={11} className="group-hover:text-violet-500 dark:group-hover:text-violet-400 transition-colors" />
+                  <span className="italic">Diagnose noch nicht eingetragen</span>
+                </button>
               )}
             </div>
           </div>

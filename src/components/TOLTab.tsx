@@ -36,8 +36,7 @@ function lookupPR(rohwert: number, normen: NormEntry[]): number | string {
 function findAltergruppe(age: number, altersgruppen: typeof tolAlterNorms.altersgruppen) {
   return (
     altersgruppen.find(g => g.label !== 'Gesamt' && g.bis !== null && age >= g.von && age <= (g.bis as number)) ??
-    altersgruppen.find(g => g.label !== 'Gesamt' && g.bis === null && age >= g.von) ??
-    altersgruppen.find(g => g.label === 'Gesamt')
+    altersgruppen.find(g => g.label !== 'Gesamt' && g.bis === null && age >= g.von)
   );
 }
 
@@ -182,21 +181,31 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
               {/* Live PR preview */}
               {previewAlter !== null && (
                 <div className="mt-1 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold w-52">→ PR Alterskorrigiert</span>
-                    <PrBadge value={previewAlter} />
-                  </div>
-                  {previewBildung !== null && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold w-52">→ PR Alters- & bildungskorrigiert</span>
-                      <PrBadge value={previewBildung} />
-                    </div>
-                  )}
-                  {!hasBildung && (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-500 italic">
-                      Bildungsjahre nicht hinterlegt – kein bildungskorrigierter PR berechnet.
-                    </p>
-                  )}
+                  {previewAlter === 'N/A'
+                    ? (
+                      <p className="text-[10px] text-red-600 dark:text-red-400 italic flex items-center gap-1">
+                        <AlertCircle size={10} /> Kein Norm für Alter {ageAtTest} verfügbar.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold w-52">→ PR Alterskorrigiert</span>
+                          <PrBadge value={previewAlter} />
+                        </div>
+                        {previewBildung !== null && previewBildung !== 'N/A' && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold w-52">→ PR Alters- & bildungskorrigiert</span>
+                            <PrBadge value={previewBildung} />
+                          </div>
+                        )}
+                        {!hasBildung && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-500 italic">
+                            Bildungsjahre nicht hinterlegt – kein bildungskorrigierter PR berechnet.
+                          </p>
+                        )}
+                      </>
+                    )
+                  }
                 </div>
               )}
             </div>

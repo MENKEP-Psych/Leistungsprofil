@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Upload, CheckCircle, AlertTriangle, Loader2, ServerCrash, WifiOff } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { dbSyncPull, dbSyncPush, dbSyncHasLocalChanges, isElectron } from '../lib/db-api';
+import { dbSyncPull, dbSyncPush, dbSyncHasLocalChanges, dbAddAuditEntry, isElectron } from '../lib/db-api';
+import { useAuth } from '../context/AuthContext';
 import type { SyncResult } from '../lib/ipc-types';
 
 interface SyncBarProps {
@@ -17,10 +18,12 @@ function formatTime(iso: string): string {
 }
 
 export const SyncBar: React.FC<SyncBarProps> = ({ serverPath, startupWarning, onSyncComplete }) => {
+  const { currentUser } = useAuth();
   const [status, setStatus] = useState<SyncStatus>('idle');
   const [message, setMessage] = useState('');
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [pullBlockedByChanges, setPullBlockedByChanges] = useState(false);
 
   const checkChanges = useCallback(async () => {
     if (!isElectron()) return;
@@ -38,9 +41,11 @@ export const SyncBar: React.FC<SyncBarProps> = ({ serverPath, startupWarning, on
     if (status === 'pulling' || status === 'pushing') return;
     if (hasChanges) {
       setStatus('error');
-      setMessage('Ungespeicherte Änderungen — bitte erst synchronisieren (↑).');
+      setPullBlockedByChanges(true);
+      setMessage('Ungespeicherte Änderungen — bitte erst synchronisieren.');
       return;
     }
+    setPullBlockedByChanges(false);
     setStatus('pulling');
     setMessage('');
     const result = await dbSyncPull();
@@ -57,9 +62,37 @@ export const SyncBar: React.FC<SyncBarProps> = ({ serverPath, startupWarning, on
     }
   };
 
+  const handleSyncAndPull = async () => {
+    if (status === 'pulling' || status === 'pushing') return;
+    setPullBlockedByChanges(false);
+    setStatus('pushing');
+    setMessage('');
+    const pushResult: SyncResult = await dbSyncPush();
+    if (!pushResult.success) {
+      setStatus('error');
+      setMessage(pushResult.error ?? 'Synchronisierung fehlgeschlagen');
+      return;
+    }
+    setStatus('pulling');
+    const pullResult = await dbSyncPull();
+    if (pullResult.success) {
+      setStatus('success');
+      setLastSync(new Date().toISOString());
+      setMessage('Synchronisiert & aktualisiert');
+      setHasChanges(false);
+      onSyncComplete();
+      await checkChanges();
+      setTimeout(() => setStatus('idle'), 4000);
+    } else {
+      setStatus('error');
+      setMessage(pullResult.error ?? 'Aktualisierung fehlgeschlagen');
+    }
+  };
+
   const handlePush = async () => {
     if (status === 'pulling' || status === 'pushing') return;
     setStatus('pushing');
+    setPullBlockedByChanges(false);
     setMessage('');
     const result: SyncResult = await dbSyncPush();
     if (result.success) {
@@ -68,6 +101,14 @@ export const SyncBar: React.FC<SyncBarProps> = ({ serverPath, startupWarning, on
       if (result.updatedPatients > 0) parts.push(`${result.updatedPatients} aktual. Pat.`);
       if (result.newResults > 0) parts.push(`${result.newResults} neue Erg.`);
       if (result.updatedResults > 0) parts.push(`${result.updatedResults} aktual. Erg.`);
+      if (result.updatedResults > 0 || result.updatedPatients > 0) {
+        dbAddAuditEntry(
+          'SYNC',
+          currentUser ?? 'System',
+          undefined,
+          `Synchronisierung: ${result.updatedResults} Ergebnisse / ${result.updatedPatients} Patienten wurden aktualisiert (ggf. Konflikte).`
+        );
+      }
       setStatus('success');
       setLastSync(new Date().toISOString());
       setMessage(parts.length > 0 ? `Synchronisiert: ${parts.join(', ')}` : 'Alles bereits aktuell');
@@ -109,13 +150,21 @@ export const SyncBar: React.FC<SyncBarProps> = ({ serverPath, startupWarning, on
       {/* Status message */}
       {message && status !== 'idle' && (
         <span className={cn(
-          'text-[10px] shrink-0',
+          'text-[10px] shrink-0 flex items-center gap-1.5',
           status === 'success' && 'text-emerald-600 dark:text-emerald-400',
           status === 'error' && 'text-red-500 dark:text-red-400',
         )}>
-          {status === 'success' && <CheckCircle size={10} className="inline mr-1" />}
-          {status === 'error' && <AlertTriangle size={10} className="inline mr-1" />}
+          {status === 'success' && <CheckCircle size={10} />}
+          {status === 'error' && <AlertTriangle size={10} />}
           {message}
+          {pullBlockedByChanges && (
+            <button
+              onClick={handleSyncAndPull}
+              className="ml-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-800/60 text-red-700 dark:text-red-300 transition-colors"
+            >
+              Jetzt sync. &amp; aktualisieren
+            </button>
+          )}
         </span>
       )}
 

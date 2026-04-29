@@ -98,11 +98,24 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
           AND lr.created_at < ?
       `).run(pullTime).changes;
 
-      // ── Users (admin may have created new accounts locally) ──
+      // ── Users (admin may have created new accounts or changed passwords locally) ──
+      // 'recovery' is a local-only pseudo-account derived from the key file — never sync it.
       newUsers = serverDb!.prepare(`
         INSERT OR IGNORE INTO users
-        SELECT * FROM local.users WHERE created_at >= ?
+        SELECT * FROM local.users WHERE created_at >= ? AND username != 'recovery'
       `).run(pullTime).changes;
+
+      // Sync password and role changes for existing users when local record is newer.
+      serverDb!.prepare(`
+        UPDATE users
+        SET password_hash = lu.password_hash,
+            role          = lu.role,
+            updated_at    = lu.updated_at
+        FROM local.users lu
+        WHERE users.username = lu.username
+          AND lu.username    != 'recovery'
+          AND lu.updated_at  > users.updated_at
+      `).run();
 
       // ── Audit log ──
       newAuditEntries = serverDb!.prepare(`

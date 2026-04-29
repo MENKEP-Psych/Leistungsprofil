@@ -38,6 +38,7 @@ import {
   isElectron,
 } from '../lib/db-api';
 import type { UserRow } from '../lib/ipc-types';
+import { AnalyticsSection } from './AnalyticsSection';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -723,6 +724,9 @@ export const AdminTab: React.FC = () => {
               </div>
             </Section>
           )}
+
+          {/* Analytics */}
+          <AnalyticsSection />
 
           {/* Audit-Log (collapsible) */}
           <Section>

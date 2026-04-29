@@ -14,6 +14,19 @@ const inputCls =
   'w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none';
 const labelCls = 'text-[10px] font-black text-slate-400 uppercase tracking-widest px-1';
 
+export const DIAGNOSE_OPTIONEN = [
+  'Schlaganfall / Apoplex',
+  'Schädel-Hirn-Trauma',
+  'Multiple Sklerose',
+  'Epilepsie',
+  'Hirntumor',
+  'Demenz / MCI',
+  'Parkinson-Syndrom',
+  'Hypoxischer Hirnschaden',
+  'Enzephalitis',
+  'Andere',
+] as const;
+
 export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, onClose, onCreate }) => {
   const [vorname, setVorname] = useState('');
   const [nachname, setNachname] = useState('');
@@ -23,6 +36,8 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
   const [neuropsychologin, setNeuropsychologin] = useState('');
   const [aufnahmedatum, setAufnahmedatum] = useState('');
   const [entlassdatum, setEntlassdatum] = useState('');
+  const [diagnose, setDiagnose] = useState('');
+  const [andereText, setAndereText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<string[]>([]);
@@ -40,6 +55,8 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
     setNeuropsychologin('');
     setAufnahmedatum('');
     setEntlassdatum('');
+    setDiagnose('');
+    setAndereText('');
     setError(null);
   };
 
@@ -47,6 +64,19 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
     reset();
     onClose();
   };
+
+  const handleDiagnoseClick = (opt: string) => {
+    if (diagnose === opt) {
+      setDiagnose('');
+    } else {
+      setDiagnose(opt);
+    }
+    if (opt !== 'Andere') setAndereText('');
+  };
+
+  const resolvedDiagnose = diagnose === 'Andere'
+    ? (andereText.trim() ? `Andere: ${andereText.trim()}` : '')
+    : diagnose;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +97,7 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
       neuropsychologin: neuropsychologin.trim() || undefined,
       aufnahmedatum: aufnahmedatum || undefined,
       entlassdatum: entlassdatum || undefined,
+      diagnose: resolvedDiagnose || undefined,
       status: 'aktiv',
       age: 0,
     });
@@ -88,9 +119,9 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden"
+            className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl shadow-slate-900/20 overflow-hidden max-h-[90vh] flex flex-col"
           >
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
                   <UserPlus size={24} />
@@ -105,7 +136,7 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-8 space-y-5">
+            <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto">
               <div className="grid grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <label className={labelCls}>Vorname</label>
@@ -158,6 +189,36 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className={labelCls}>Aufnahmediagnose (optional)</label>
+                <div className="flex flex-wrap gap-2">
+                  {DIAGNOSE_OPTIONEN.map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => handleDiagnoseClick(opt)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        diagnose === opt
+                          ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-violet-300 hover:text-violet-600'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                {diagnose === 'Andere' && (
+                  <input
+                    type="text"
+                    value={andereText}
+                    onChange={e => setAndereText(e.target.value)}
+                    placeholder="Diagnose eingeben…"
+                    className={inputCls + ' mt-2'}
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="space-y-2">

@@ -11,9 +11,17 @@ const WP_TO_PR: Record<number, number> = {
   15: 95, 16: 98, 17: 99, 18: 99, 19: 99,
 };
 
-export function wpToPR(wp: number): number {
-  const clamped = Math.max(1, Math.min(19, Math.round(wp)));
-  return WP_TO_PR[clamped] ?? 50;
+export function wpToPR(wp: number): number | null {
+  if (wp === null || wp === undefined || isNaN(wp)) {
+    console.warn('wpToPR: ungültiger Eingabewert', wp);
+    return null;
+  }
+  const rounded = Math.round(wp);
+  if (rounded < 1 || rounded > 19) {
+    console.warn(`wpToPR: WP=${rounded} außerhalb gültigem Bereich 1–19`);
+    return null;
+  }
+  return WP_TO_PR[rounded] ?? null;
 }
 
 // ── ZZT – Zahlen-Zeige-Test ───────────────────────────────────────────────────
@@ -46,10 +54,10 @@ export function lookupZZT(times: (number | null)[]): { wp: number; pr: number } 
   const roundedWP = Math.round(avgWP);
 
   // Find PR for the rounded WP
-  const wpRow = rows.find(r => r.wp === roundedWP) ?? rows.find(r => r.wp === Math.min(...rows.map(r2 => Math.abs(r2.wp - roundedWP))));
-  const pr = wpRow?.pr ?? 50;
+  const wpRow = rows.find(r => r.wp === roundedWP);
+  if (!wpRow) return null;
 
-  return { wp: roundedWP, pr };
+  return { wp: roundedWP, pr: wpRow.pr };
 }
 
 // ── Mosaik Test ───────────────────────────────────────────────────────────────
@@ -86,7 +94,8 @@ function getMosaikAgeCol(age: number): string {
 function parseRohwertRange(val: string | null): [number, number] | null {
   if (!val) return null;
   const s = val.trim();
-  const dashIdx = s.indexOf('\u2013'); // en-dash
+  let dashIdx = s.indexOf('\u2013'); // en-dash
+  if (dashIdx < 0) dashIdx = s.indexOf('-', s.startsWith('-') ? 1 : 0);
   if (dashIdx > 0) {
     const a = parseInt(s.slice(0, dashIdx), 10);
     const b = parseInt(s.slice(dashIdx + 1), 10);
