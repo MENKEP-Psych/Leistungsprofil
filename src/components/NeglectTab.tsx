@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { Save, History, CheckCircle2, Eye, Pencil, X, ChevronDown, ChevronUp, Trash2, Check } from 'lucide-react';
 import { PageHeader } from './TestForm';
 import { Patient, TestResult } from '../types';
@@ -43,6 +44,7 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
   const [expApples,    setExpApples]    = useState('');
   const [expAbzeichen, setExpAbzeichen] = useState('');
   const [expUhr,       setExpUhr]       = useState('');
+  const [expFreitext,  setExpFreitext]  = useState('');
 
   const [editingId,       setEditingId]       = useState<string | null>(null);
   const [lastSaved,       setLastSaved]       = useState(false);
@@ -55,7 +57,7 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
 
   const resetForm = () => {
     setExpLinien(''); setExpDreieck(''); setExpApples('');
-    setExpAbzeichen(''); setExpUhr('');
+    setExpAbzeichen(''); setExpUhr(''); setExpFreitext('');
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
@@ -72,6 +74,7 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
     setExpApples(String(r.exp_apples ?? ''));
     setExpAbzeichen(String(r.exp_abzeichen ?? ''));
     setExpUhr(String(r.exp_uhr ?? ''));
+    setExpFreitext(String(r.exp_freitext ?? ''));
   };
 
   const cancelEdit = () => { setEditingId(null); resetForm(); };
@@ -83,6 +86,7 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
       exp_apples:    expApples,
       exp_abzeichen: expAbzeichen,
       exp_uhr:       expUhr,
+      exp_freitext:  expFreitext,
     };
 
     const result: TestResult = {
@@ -104,6 +108,8 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
     setTimeout(() => setLastSaved(false), 3000);
     resetForm();
   };
+
+  useShortcutSave(handleSave);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -185,6 +191,21 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
               </div>
             </div>
           ))}
+          {/* Freitext */}
+          <div className="flex items-start gap-3 pt-1">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 w-36 shrink-0 text-right italic pt-1">
+              Freitext
+            </span>
+            <div className="flex-1">
+              <textarea
+                value={expFreitext}
+                onChange={e => setExpFreitext(e.target.value)}
+                placeholder="Qualitative Beobachtungen, weitere Tests..."
+                rows={2}
+                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 dark:text-slate-200 resize-none"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Note */}
@@ -295,6 +316,16 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
                               <span className="text-slate-700 dark:text-slate-200">{String(res.rawValues[key])}</span>
                             </div>
                           ) : null
+                        )}
+                        {res.rawValues.exp_freitext && (
+                          <div className="flex gap-2 text-xs">
+                            <span className="text-slate-400 dark:text-slate-500 italic w-36 shrink-0 text-right">
+                              Freitext:
+                            </span>
+                            <span className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
+                              {String(res.rawValues.exp_freitext)}
+                            </span>
+                          </div>
                         )}
                       </div>
                       {res.note && (

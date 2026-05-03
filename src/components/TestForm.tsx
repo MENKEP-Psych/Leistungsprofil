@@ -3,7 +3,7 @@
  * Ensures visual consistency across TAP, TMT, VLMT, TOL, etc.
  */
 import React from 'react';
-import { Save, CheckCircle2, X, History } from 'lucide-react';
+import { Save, CheckCircle2, X, History, OctagonX } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // ── PR color coding (single source of truth) ──────────────────────────────────
@@ -280,6 +280,54 @@ export const NoteField: React.FC<NoteFieldProps> = ({ value, onChange }) => (
       className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-600 dark:text-slate-300 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none"
     />
   </div>
+);
+
+// ── AbortButton — toggle + optional comment textarea ──────────────────────────
+
+interface AbortButtonProps {
+  aborted: boolean;
+  comment: string;
+  onToggle: () => void;
+  onComment: (v: string) => void;
+}
+
+export const AbortButton: React.FC<AbortButtonProps> = ({ aborted, comment, onToggle, onComment }) => (
+  <div className="space-y-2">
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all w-full',
+        aborted
+          ? 'bg-orange-100 text-orange-700 border-2 border-orange-400 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-600'
+          : 'bg-slate-50 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:border-slate-600 hover:border-orange-300 hover:text-orange-600 dark:hover:text-orange-400',
+      )}
+    >
+      <OctagonX size={15} className="shrink-0" />
+      {aborted ? 'Test als abgebrochen markiert — hier klicken zum Aufheben' : 'Test abgebrochen / unvollständig'}
+    </button>
+    {aborted && (
+      <textarea
+        value={comment}
+        onChange={e => onComment(e.target.value)}
+        placeholder="Grund für Abbruch (z.B. Patient verweigerte Weiterführung, Ermüdung, Zeit)"
+        rows={2}
+        className="w-full px-3 py-2 text-sm border-2 border-orange-300 rounded-xl bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700 dark:text-slate-200 outline-none focus:border-orange-500 resize-none placeholder:text-orange-300 dark:placeholder:text-orange-700"
+      />
+    )}
+  </div>
+);
+
+// ── AbortBadge — small pill shown in history tables ───────────────────────────
+
+export const AbortBadge: React.FC<{ comment?: string }> = ({ comment }) => (
+  <span
+    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 whitespace-nowrap"
+    title={comment || 'Abgebrochen'}
+  >
+    <OctagonX size={8} />
+    Abgebr.
+  </span>
 );
 
 // ── FormSave — save / cancel button row ──────────────────────────────────────

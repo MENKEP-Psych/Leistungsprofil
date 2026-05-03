@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
-import { ScrollText } from 'lucide-react';
+import { Hash } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { lookupLGWP, lookupLGWiedererkennung, wpToPR } from '../lib/normUtils';
+import { lookupZahlenspanne } from '../lib/normUtils';
 import {
   PrBadge, TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
-interface LGTabProps {
+interface BlockspanneTabProps {
   patient: Patient;
   previousResults: TestResult[];
   onSave: (result: TestResult) => void;
@@ -19,11 +19,10 @@ interface LGTabProps {
   onDelete: (id: string) => void;
 }
 
-export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, onUpdate, onDelete }) => {
+export const BlockspanneTab: React.FC<BlockspanneTabProps> = ({ patient, previousResults, onSave, onUpdate, onDelete }) => {
   const { currentUser } = useAuth();
-  const [rawLgI, setRawLgI] = useState('');
-  const [rawLgII, setRawLgII] = useState('');
-  const [rawWiedererk, setRawWiedererk] = useState('');
+  const [rawVorwaerts, setRawVorwaerts] = useState('');
+  const [rawRueckwaerts, setRawRueckwaerts] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [examiner, setExaminer] = useState(currentUser ?? '');
@@ -36,18 +35,14 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
   const ageAtTest = calculateAge(patient.geburtsdatum, date);
 
   const results = previousResults
-    .filter(r => r.testId === 'lg')
+    .filter(r => r.testId === 'blockspanne')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const lgIVal = rawLgI !== '' && !isNaN(Number(rawLgI)) ? Number(rawLgI) : null;
-  const lgIIVal = rawLgII !== '' && !isNaN(Number(rawLgII)) ? Number(rawLgII) : null;
-  const wiedererkVal = rawWiedererk !== '' && !isNaN(Number(rawWiedererk)) ? Number(rawWiedererk) : null;
+  const vwVal = rawVorwaerts !== '' && !isNaN(Number(rawVorwaerts)) ? Number(rawVorwaerts) : null;
+  const rkVal = rawRueckwaerts !== '' && !isNaN(Number(rawRueckwaerts)) ? Number(rawRueckwaerts) : null;
 
-  const wpLgI = lgIVal !== null ? lookupLGWP(lgIVal, ageAtTest, 'lgI') : null;
-  const wpLgII = lgIIVal !== null ? lookupLGWP(lgIIVal, ageAtTest, 'lgII') : null;
-  const prLgI = wpLgI !== null ? wpToPR(wpLgI) : null;
-  const prLgII = wpLgII !== null ? wpToPR(wpLgII) : null;
-  const prWiedererk = wiedererkVal !== null ? lookupLGWiedererkennung(wiedererkVal, ageAtTest) : null;
+  const prVorwaerts = vwVal !== null ? lookupZahlenspanne(vwVal, ageAtTest, 'vorwaerts') : null;
+  const prRueckwaerts = rkVal !== null ? lookupZahlenspanne(rkVal, ageAtTest, 'rueckwaerts') : null;
 
   const inputCls = cn(
     'w-full px-4 py-3 text-xl font-mono border-2 rounded-xl outline-none transition-all text-center',
@@ -55,7 +50,7 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
   );
 
   const reset = () => {
-    setRawLgI(''); setRawLgII(''); setRawWiedererk(''); setNote('');
+    setRawVorwaerts(''); setRawRueckwaerts(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setAborted(false); setAbortComment('');
@@ -63,9 +58,8 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
 
   const startEdit = (res: TestResult) => {
     setEditingId(res.id);
-    setRawLgI(String(res.rawValues.lgI ?? ''));
-    setRawLgII(String(res.rawValues.lgII ?? ''));
-    setRawWiedererk(String(res.rawValues.wiedererk ?? ''));
+    setRawVorwaerts(String(res.rawValues.vorwaerts ?? ''));
+    setRawRueckwaerts(String(res.rawValues.rueckwaerts ?? ''));
     setDate(res.date);
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
@@ -76,36 +70,29 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && lgIVal === null && lgIIVal === null && wiedererkVal === null) return;
+    if (!aborted && vwVal === null && rkVal === null) return;
 
     const rawValues: Record<string, number | string> = {};
-    if (lgIVal !== null) rawValues.lgI = lgIVal;
-    if (lgIIVal !== null) rawValues.lgII = lgIIVal;
-    if (wiedererkVal !== null) rawValues.wiedererk = wiedererkVal;
-
-    const calcVals: Record<string, number> = {};
-    if (wpLgI !== null) calcVals.wpLgI = wpLgI;
-    if (wpLgII !== null) calcVals.wpLgII = wpLgII;
+    if (vwVal !== null) rawValues.vorwaerts = vwVal;
+    if (rkVal !== null) rawValues.rueckwaerts = rkVal;
 
     const prs: Record<string, number | string> = {};
-    if (prLgI !== null) prs.lgI = prLgI;
-    if (prLgII !== null) prs.lgII = prLgII;
-    if (prWiedererk !== null) prs.wiedererk = prWiedererk;
+    if (prVorwaerts !== null) prs.vorwaerts = prVorwaerts;
+    if (prRueckwaerts !== null) prs.rueckwaerts = prRueckwaerts;
 
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'lg',
+      testId: 'blockspanne',
       date,
       examiner,
       note,
       rawValues,
-      calculatedValues: calcVals,
+      calculatedValues: {},
       percentileRanks: prs,
-      normInfo: 'WMS-R Logisches Gedächtnis [LG] – Normtabelle',
+      normInfo: 'WMS-R Zahlenspanne [ZN 3] – Normtabelle (Blockspanne)',
       domainMapping: {
-        lgI: '2. Gedächtnis (Verbale Lern- und Merkfähigkeit)',
-        lgII: '2. Gedächtnis (Verbale Lern- und Merkfähigkeit)',
-        wiedererk: '2. Gedächtnis (Verbale Lern- und Merkfähigkeit)',
+        vorwaerts: '2. Gedächtnis (Merkspanne)',
+        rueckwaerts: '2. Gedächtnis (Arbeitsgedächtnis)',
       },
       aborted: aborted || undefined,
       abortComment: aborted ? abortComment : undefined,
@@ -122,9 +109,9 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={<ScrollText size={22} />}
-        title="Logisches Gedächtnis (LG)"
-        subtitle={`Verbale Lern- und Merkfähigkeit (WMS-R) · Alter zum Testdatum: ${ageAtTest} J.`}
+        icon={<Hash size={22} />}
+        title="Blockspanne"
+        subtitle={`Merkspanne & Arbeitsgedächtnis (WMS-R) · Alter zum Testdatum: ${ageAtTest} J.`}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -133,70 +120,45 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
             <TestMeta date={date} onDate={setDate} examiner={examiner} onExaminer={setExaminer} />
 
-            <div className="grid grid-cols-3 gap-4">
-              {/* LG I */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  LG I – unmittelbar
+                  Vorwärts (Rohwert, max. 12)
                 </label>
                 <input
                   type="number"
-                  value={rawLgI}
-                  onChange={e => setRawLgI(e.target.value)}
+                  value={rawVorwaerts}
+                  onChange={e => setRawVorwaerts(e.target.value)}
                   className={inputCls}
                   placeholder="–"
                   min={0}
-                  max={50}
+                  max={12}
                 />
-                {wpLgI !== null && prLgI !== null && (
-                  <div className="space-y-0.5">
-                    <div className="text-[10px] text-slate-400 text-center">WP {wpLgI}</div>
-                    <div className="flex justify-center"><PrBadge value={prLgI} /></div>
+                {prVorwaerts !== null && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold">→ PR</span>
+                    <PrBadge value={prVorwaerts} />
                   </div>
                 )}
               </div>
 
-              {/* LG II */}
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  LG II – verzögert
+                  Rückwärts (Rohwert, max. 12)
                 </label>
                 <input
                   type="number"
-                  value={rawLgII}
-                  onChange={e => setRawLgII(e.target.value)}
+                  value={rawRueckwaerts}
+                  onChange={e => setRawRueckwaerts(e.target.value)}
                   className={inputCls}
                   placeholder="–"
                   min={0}
-                  max={50}
+                  max={12}
                 />
-                {wpLgII !== null && prLgII !== null && (
-                  <div className="space-y-0.5">
-                    <div className="text-[10px] text-slate-400 text-center">WP {wpLgII}</div>
-                    <div className="flex justify-center"><PrBadge value={prLgII} /></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Wiedererkennung */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Wiedererkennung (0–30)
-                </label>
-                <input
-                  type="number"
-                  value={rawWiedererk}
-                  onChange={e => setRawWiedererk(e.target.value)}
-                  className={inputCls}
-                  placeholder="–"
-                  min={0}
-                  max={30}
-                />
-                {prWiedererk !== null && (
-                  <div className="flex justify-center">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-black">
-                      PR {prWiedererk}
-                    </span>
+                {prRueckwaerts !== null && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold">→ PR</span>
+                    <PrBadge value={prRueckwaerts} />
                   </div>
                 )}
               </div>
@@ -209,9 +171,9 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
 
           <div className="px-4 py-3 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-[11px] text-slate-400 leading-relaxed">
             <span className="font-black text-slate-500 uppercase tracking-wider">Norm: </span>
-            WMS-R Logisches Gedächtnis [LG] – Normtabelle
+            WMS-R Zahlenspanne [ZN 3] – alterskorrigierte Normtabelle
             <span className="block mt-1 italic">
-              LG I / II: Rohwert → alterskorrigierter Wertpunkt (WP) → PR. Wiedererkennung: Rohwert → PR-Bereich.
+              Vorwärts → Merkspanne · Rückwärts → Arbeitsgedächtnis. Höhere Rohwerte = bessere Leistung.
             </span>
           </div>
         </div>
@@ -228,12 +190,10 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
                 <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 font-black uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">Datum</th>
-                    <th className="px-3 py-3 text-center">LG I</th>
-                    <th className="px-3 py-3 text-center">PR I</th>
-                    <th className="px-3 py-3 text-center">LG II</th>
-                    <th className="px-3 py-3 text-center">PR II</th>
-                    <th className="px-3 py-3 text-center">WE</th>
-                    <th className="px-3 py-3 text-center">PR WE</th>
+                    <th className="px-3 py-3 text-center">Vorw.</th>
+                    <th className="px-3 py-3 text-center">PR Vorw.</th>
+                    <th className="px-3 py-3 text-center">Rückw.</th>
+                    <th className="px-3 py-3 text-center">PR Rückw.</th>
                     {patient.status !== 'entlassen' && <th className="px-2 py-3 w-16" />}
                   </tr>
                 </thead>
@@ -252,20 +212,20 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
                           {res.aborted && <AbortBadge comment={res.abortComment} />}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{res.rawValues.lgI ?? '–'}</td>
-                      <td className="px-3 py-3 text-center">
-                        {res.percentileRanks.lgI !== undefined ? <PrBadge value={res.percentileRanks.lgI} /> : <span className="text-slate-300">–</span>}
+                      <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                        {res.rawValues.vorwaerts ?? '–'}
                       </td>
-                      <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{res.rawValues.lgII ?? '–'}</td>
                       <td className="px-3 py-3 text-center">
-                        {res.percentileRanks.lgII !== undefined ? <PrBadge value={res.percentileRanks.lgII} /> : <span className="text-slate-300">–</span>}
+                        {res.percentileRanks.vorwaerts !== undefined
+                          ? <PrBadge value={res.percentileRanks.vorwaerts} />
+                          : <span className="text-slate-300">–</span>}
                       </td>
-                      <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{res.rawValues.wiedererk ?? '–'}</td>
+                      <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                        {res.rawValues.rueckwaerts ?? '–'}
+                      </td>
                       <td className="px-3 py-3 text-center">
-                        {res.percentileRanks.wiedererk !== undefined
-                          ? <span className="inline-flex items-center px-1.5 py-0.5 rounded-lg bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[10px] font-black">
-                              {res.percentileRanks.wiedererk}
-                            </span>
+                        {res.percentileRanks.rueckwaerts !== undefined
+                          ? <PrBadge value={res.percentileRanks.rueckwaerts} />
                           : <span className="text-slate-300">–</span>}
                       </td>
                       {patient.status !== 'entlassen' && (

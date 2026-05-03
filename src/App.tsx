@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { getTestSymbolCounts } from './lib/testSummary';
 import { usePatientData } from './hooks/usePatientData';
+import { usePatients } from './hooks/usePatients';
 import { PatientHeader } from './components/PatientHeader';
 import { TMTTab } from './components/TMTTab';
 import { VLMTTab } from './components/VLMTTab';
@@ -38,7 +39,9 @@ import { ZZTTab } from './components/ZZTTab';
 import { MosaikTab } from './components/MosaikTab';
 import { ROCFTTab } from './components/ROCFTTab';
 import { ZahlenspanneTab } from './components/ZahlenspanneTab';
+import { BlockspanneTab } from './components/BlockspanneTab';
 import { LGTab } from './components/LGTab';
+import { LPSTab } from './components/LPSTab';
 import { CustomTestTab } from './components/CustomTestTab';
 import { ProfileTab } from './components/ProfileTab';
 import { AdminTab } from './components/AdminTab';
@@ -56,7 +59,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { cn } from './lib/utils';
 import { dbGetStartupState, dbSyncGetServerPath, isElectron } from './lib/db-api';
 
-type TabType = 'patients' | 'profile' | 'tmt' | 'vlmt' | 'tol' | 'neglect' | 'tap' | 'wms' | 'admin' | 'custom' | 'buerotest' | 'tagesplan' | 'zzt' | 'mosaik' | 'rocft' | 'zahlenspanne' | 'lg' | 'notifications';
+type TabType = 'patients' | 'profile' | 'tmt' | 'vlmt' | 'tol' | 'neglect' | 'tap' | 'wms' | 'admin' | 'custom' | 'buerotest' | 'tagesplan' | 'zzt' | 'mosaik' | 'rocft' | 'zahlenspanne' | 'blockspanne' | 'lg' | 'lps' | 'notifications';
 
 // ── Startup loading gate ──────────────────────────────────────────────────────
 
@@ -146,7 +149,97 @@ function AppContent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { isAuthenticated, logout, currentUser } = useAuth();
+  const { patients: allPatients } = usePatients();
   const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // Ctrl+S          → Testergebnis speichern (aktiver Test-Tab)
+  // Ctrl+<  or  /// → Leistungsprofil
+  // Ctrl+Y  or  *** → Patientenübersicht
+  // PageDown / PageUp → nächster / vorheriger Test-Tab
+  const slashTimes  = useRef<number[]>([]);
+  const starTimes   = useRef<number[]>([]);
+  const TRIPLE_MS   = 600;
+  const activeTabRef = useRef<TabType>(activeTab);
+  useEffect(() => { activeTabRef.current = activeTab; });
+
+  const NAVIGABLE_TABS: TabType[] = ['profile', 'tmt', 'zzt', 'tap', 'vlmt', 'wms', 'zahlenspanne', 'blockspanne', 'lg', 'mosaik', 'rocft', 'lps', 'tol', 'buerotest', 'tagesplan', 'neglect', 'custom'];
+  const TEST_TABS_SET = new Set<TabType>(['tmt', 'zzt', 'tap', 'vlmt', 'wms', 'zahlenspanne', 'blockspanne', 'lg', 'mosaik', 'rocft', 'lps', 'tol', 'buerotest', 'tagesplan', 'neglect', 'custom']);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
+
+      // Ctrl+S → aktuellen Test speichern
+      if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+        if (TEST_TABS_SET.has(activeTabRef.current) && selectedId) {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('shortcut:save'));
+        }
+        return;
+      }
+      // Ctrl+< → Leistungsprofil
+      if (e.ctrlKey && e.key === '<') {
+        e.preventDefault();
+        if (selectedId) setActiveTab('profile');
+        return;
+      }
+      // Ctrl+Y → Patientenübersicht
+      if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        setActiveTab('patients');
+        return;
+      }
+      // PageDown → nächster Test-Tab (nicht in Eingabefeldern)
+      if (e.key === 'PageDown' && selectedId && !inInput) {
+        const idx = NAVIGABLE_TABS.indexOf(activeTabRef.current);
+        if (idx !== -1 && idx < NAVIGABLE_TABS.length - 1) {
+          e.preventDefault();
+          setActiveTab(NAVIGABLE_TABS[idx + 1]);
+        }
+        return;
+      }
+      // PageUp → vorheriger Test-Tab (nicht in Eingabefeldern)
+      if (e.key === 'PageUp' && selectedId && !inInput) {
+        const idx = NAVIGABLE_TABS.indexOf(activeTabRef.current);
+        if (idx > 0) {
+          e.preventDefault();
+          setActiveTab(NAVIGABLE_TABS[idx - 1]);
+        }
+        return;
+      }
+      // Triple / → Leistungsprofil (not in text inputs)
+      if (e.key === '/' && !inInput && !e.ctrlKey && !e.metaKey) {
+        const now = Date.now();
+        slashTimes.current.push(now);
+        if (slashTimes.current.length > 3) slashTimes.current.shift();
+        if (slashTimes.current.length === 3 && now - slashTimes.current[0] < TRIPLE_MS && selectedId) {
+          slashTimes.current = [];
+          setActiveTab('profile');
+        }
+        return;
+      }
+      // Triple * → Patientenübersicht (not in text inputs)
+      if (e.key === '*' && !inInput && !e.ctrlKey && !e.metaKey) {
+        const now = Date.now();
+        starTimes.current.push(now);
+        if (starTimes.current.length > 3) starTimes.current.shift();
+        if (starTimes.current.length === 3 && now - starTimes.current[0] < TRIPLE_MS) {
+          starTimes.current = [];
+          setActiveTab('patients');
+        }
+        return;
+      }
+      // Any unrelated key resets triple-press tracking
+      if (e.key !== '/' && e.key !== '*') {
+        slashTimes.current = [];
+        starTimes.current  = [];
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedId]);
 
   if (!isAuthenticated) return <Login />;
 
@@ -154,6 +247,15 @@ function AppContent() {
     setSelectedId(id);
     setActiveTab('profile');
   };
+
+  // Find other patients with identical name + birthdate (previous admissions or accidental duplicates)
+  const previousAdmissions = patient
+    ? allPatients.filter(p =>
+        p.id !== patient.id &&
+        p.name.trim().toLowerCase() === patient.name.trim().toLowerCase() &&
+        p.geburtsdatum === patient.geburtsdatum
+      )
+    : [];
 
   const handleDischarge = async () => {
     const success = await dischargePatient();
@@ -166,8 +268,9 @@ function AppContent() {
   // Map sidebar tab IDs to test result testIds for PR symbol display
   const TAB_TO_TEST_ID: Record<string, string> = {
     tmt: 'tmt', tap: 'tap', zzt: 'zzt',
-    vlmt: 'vlmt', wms: 'wms_vw', zahlenspanne: 'zahlenspanne', lg: 'lg',
+    vlmt: 'vlmt', wms: 'wms_vw', zahlenspanne: 'zahlenspanne', blockspanne: 'blockspanne', lg: 'lg',
     mosaik: 'mosaik', rocft: 'rey',
+    lps: 'lps',
     tol: 'tol',
   };
 
@@ -179,15 +282,19 @@ function AppContent() {
       label: null,
       items: [
         { id: 'patients', label: 'Patienten', icon: Users },
-        { id: 'profile', label: 'Leistungsprofil', icon: LayoutDashboard, disabled: !selectedId },
       ],
     },
     {
       label: '1. Aufmerksamkeit',
       items: [
         { id: 'tmt', label: 'TMT A/B', icon: Activity, disabled: !selectedId },
-        { id: 'tap', label: 'TAP', icon: Zap, disabled: !selectedId },
         { id: 'zzt', label: 'ZZT', icon: Timer, disabled: !selectedId },
+      ],
+    },
+    {
+      label: 'TAP',
+      items: [
+        { id: 'tap', label: 'TAP', icon: Zap, disabled: !selectedId },
       ],
     },
     {
@@ -196,6 +303,7 @@ function AppContent() {
         { id: 'vlmt', label: 'VLMT', icon: BookOpen, disabled: !selectedId },
         { id: 'wms', label: 'Vis. Wiedergabe', icon: Brain, disabled: !selectedId },
         { id: 'zahlenspanne', label: 'Zahlenspanne', icon: Hash, disabled: !selectedId },
+        { id: 'blockspanne', label: 'Blockspanne', icon: Grid2x2, disabled: !selectedId },
         { id: 'lg', label: 'Log. Gedächtnis', icon: ScrollText, disabled: !selectedId },
       ],
     },
@@ -204,6 +312,12 @@ function AppContent() {
       items: [
         { id: 'mosaik', label: 'Mosaik-Test', icon: Grid2x2, disabled: !selectedId },
         { id: 'rocft',  label: 'Rey-Figur (ROCFT)', icon: PenLine, disabled: !selectedId },
+      ],
+    },
+    {
+      label: '4. Intellektuelle Leistungen',
+      items: [
+        { id: 'lps', label: 'LPS', icon: Brain, disabled: !selectedId },
       ],
     },
     {
@@ -245,6 +359,9 @@ function AppContent() {
           onUndoDischarge={undoDischarge}
           generalNote={generalNote}
           onSaveGeneralNote={saveGeneralNote}
+          onShowProfile={() => setActiveTab('profile')}
+          previousAdmissions={previousAdmissions}
+          onSelectPreviousPatient={(id) => { setSelectedId(id); setActiveTab('profile'); }}
         />
       )}
 
@@ -491,6 +608,16 @@ function AppContent() {
                   />
                 )}
 
+                {activeTab === 'lps' && patient && (
+                  <LPSTab
+                    patient={patient}
+                    previousResults={previousResults}
+                    onSave={saveScore}
+                    onUpdate={updateResult}
+                    onDelete={deleteResult}
+                  />
+                )}
+
                 {activeTab === 'custom' && patient && (
                   <CustomTestTab
                     patient={patient}
@@ -533,6 +660,16 @@ function AppContent() {
 
                 {activeTab === 'zahlenspanne' && patient && (
                   <ZahlenspanneTab
+                    patient={patient}
+                    previousResults={previousResults}
+                    onSave={saveScore}
+                    onUpdate={updateResult}
+                    onDelete={deleteResult}
+                  />
+                )}
+
+                {activeTab === 'blockspanne' && patient && (
+                  <BlockspanneTab
                     patient={patient}
                     previousResults={previousResults}
                     onSave={saveScore}

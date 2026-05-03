@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, OctagonX } from 'lucide-react';
 import { PRResult } from '../types';
 import { formatDate } from '../lib/utils';
 
@@ -240,11 +240,12 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] 
 
           // ── Single bar row renderer ──────────────────────────────────────────
           const BarRow = ({ res, rowIdx }: { res: PRResult; rowIdx: number }) => {
-            const currPrNum  = prToNum(res.currentPr);
+            const isAbortedNoData = res.aborted && (res.currentPr === 'n/a' || res.currentPr === undefined);
+            const currPrNum  = isAbortedNoData ? 50 : prToNum(res.currentPr);
             const currVisPos = prToEqualPos(currPrNum);
             const prevPrNum  = res.previousPr !== undefined ? prToNum(res.previousPr) : null;
             const prevVisPos = prevPrNum !== null ? prToEqualPos(prevPrNum) : null;
-            const currZone   = getZone(res.currentPr);
+            const currZone   = isAbortedNoData ? ZONES[3] : getZone(res.currentPr);
 
             return (
               <div className={`flex items-center gap-0 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-700/40'}`}>
@@ -252,7 +253,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] 
                 {/* ── LEFT INFO COLUMN ── */}
                 <div className="shrink-0 pr-3 py-1 flex gap-0 overflow-hidden" style={{ width: LEFT_W, minHeight: 26 }}>
                   {res.testGroup && (
-                    <div className="shrink-0 w-1 rounded-full mr-1.5 self-stretch bg-slate-300 dark:bg-slate-600" />
+                    <div className={`shrink-0 w-1 rounded-full mr-1.5 self-stretch ${isAbortedNoData ? 'bg-orange-300' : 'bg-slate-300 dark:bg-slate-600'}`} />
                   )}
                   <div className="flex flex-col justify-center flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -268,6 +269,15 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] 
                           {res.tapVersion}
                         </span>
                       )}
+                      {res.lpsKorrektur && (
+                        <span
+                          className="text-[8px] font-black px-1 py-px rounded shrink-0 border"
+                          style={{ color: '#0369a1', backgroundColor: '#f0f9ff', borderColor: '#bae6fd' }}
+                          title={`Normkorrektur: ${res.lpsKorrektur}`}
+                        >
+                          {res.lpsKorrektur}
+                        </span>
+                      )}
                       <div className="flex items-center gap-0.5 shrink-0">
                         {res.previousPr !== undefined ? (
                           <span className="text-[8px] font-black px-1 py-px rounded tabular-nums"
@@ -277,11 +287,23 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] 
                         ) : (
                           <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 px-1">–</span>
                         )}
+                        {res.prevAborted && (
+                          <span title={res.prevAbortComment || 'Vorheriger Test abgebrochen'}
+                            className="inline-flex items-center text-orange-500 opacity-70">
+                            <OctagonX size={8} />
+                          </span>
+                        )}
                         <span className="text-slate-300 dark:text-slate-600 text-[8px]">›</span>
-                        <span className="text-[8px] font-black px-1 py-px rounded tabular-nums"
-                          style={{ color: currZone.color, backgroundColor: currZone.bg }}>
-                          {res.currentPr}
-                        </span>
+                        {isAbortedNoData ? (
+                          <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1 py-px rounded bg-orange-100 text-orange-700 border border-orange-300">
+                            <OctagonX size={7} />Abgebr.
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-black px-1 py-px rounded tabular-nums"
+                            style={{ color: currZone.color, backgroundColor: currZone.bg }}>
+                            {res.currentPr}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {(res.date || res.prevDate) && (
@@ -295,97 +317,108 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] 
                       <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{res.testGroup}</span>
                     )}
                     {res.note && (
-                      <div className="text-[9px] italic text-slate-400 truncate mt-px">{res.note}</div>
+                      <div className="text-[9px] italic text-slate-400 whitespace-pre-wrap mt-px">{res.note}</div>
                     )}
                   </div>
                 </div>
 
                 {/* ── BAR AREA ── */}
                 <div className="pr-bar-row flex-1 relative" style={{ height: 26 }}>
-                  <div className="absolute inset-0 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600">
-                    {ZONES.map(z => (
-                      <div key={z.prLabel} className="absolute inset-y-0"
-                        style={{ left: `${z.visMin}%`, width: `${z.visMax - z.visMin}%`, backgroundColor: z.bg }} />
-                    ))}
-                    {ZONES.slice(1).map((z, i) => (
-                      <div key={z.prLabel + '-div'}
-                        className={`absolute inset-y-0 ${(i === 1 || i === 4) ? 'pr-zone-div-major' : 'pr-zone-div-minor'}`}
-                        style={{
-                          left: `${z.visMin}%`,
-                          width: (i === 1 || i === 4) ? 2 : 1,
-                          backgroundColor: (i === 1 || i === 4) ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.08)',
-                        }} />
-                    ))}
-                  </div>
+                  {isAbortedNoData ? (
+                    <div className="absolute inset-0 rounded-xl flex items-center px-3 border border-orange-200 dark:border-orange-900 bg-orange-50/70 dark:bg-orange-950/30">
+                      <OctagonX size={10} className="text-orange-400 shrink-0 mr-1.5" />
+                      <span className="text-[10px] text-orange-700 dark:text-orange-300 italic truncate">
+                        {res.abortComment || 'Test abgebrochen / unvollständig'}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600">
+                        {ZONES.map(z => (
+                          <div key={z.prLabel} className="absolute inset-y-0"
+                            style={{ left: `${z.visMin}%`, width: `${z.visMax - z.visMin}%`, backgroundColor: z.bg }} />
+                        ))}
+                        {ZONES.slice(1).map((z, i) => (
+                          <div key={z.prLabel + '-div'}
+                            className={`absolute inset-y-0 ${(i === 1 || i === 4) ? 'pr-zone-div-major' : 'pr-zone-div-minor'}`}
+                            style={{
+                              left: `${z.visMin}%`,
+                              width: (i === 1 || i === 4) ? 2 : 1,
+                              backgroundColor: (i === 1 || i === 4) ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.08)',
+                            }} />
+                        ))}
+                      </div>
 
-                  {/* Current PR – range or point */}
-                  {(() => {
-                    const range = parseRangeBounds(res.currentPr);
-                    if (range) {
-                      const [lo, hi] = range;
-                      const segments = ZONES
-                        .filter(z => z.prMax > lo && z.prMin < hi)
-                        .map((z, si, arr) => ({
-                          vL: prToEqualPos(Math.max(lo, z.prMin)),
-                          vR: prToEqualPos(Math.min(hi, z.prMax)),
-                          color: z.color, first: si === 0, last: si === arr.length - 1,
-                        }));
-                      return (
-                        <>
-                          {segments.map((seg, si) => (
-                            <motion.div key={si}
-                              initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: 1 }}
-                              transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-                              className="absolute z-30"
-                              style={{
-                                left: `${seg.vL}%`, width: `${Math.max(seg.vR - seg.vL, 0.3)}%`,
-                                top: 3, bottom: 3, transformOrigin: 'left center',
-                                backgroundColor: seg.color,
-                                borderTop: `2px solid ${seg.color}`, borderBottom: `2px solid ${seg.color}`,
-                                borderLeft: seg.first ? `2px solid ${seg.color}` : 'none',
-                                borderRight: seg.last ? `2px solid ${seg.color}` : 'none',
-                                borderRadius: seg.first && seg.last ? 3 : seg.first ? '3px 0 0 3px' : seg.last ? '0 3px 3px 0' : 0,
-                              }} />
-                          ))}
-                        </>
-                      );
-                    }
-                    return (
-                      <motion.div
-                        initial={{ scaleY: 0, opacity: 0 }} animate={{ scaleY: 1, opacity: 1 }}
-                        transition={{ type: 'spring', bounce: 0.3, duration: 0.4 }}
-                        className="absolute z-30"
-                        style={{
-                          left: `${currVisPos}%`, top: 3, bottom: 3,
-                          transform: 'translateX(-50%)', transformOrigin: 'center',
-                          width: 5, borderRadius: 2, backgroundColor: currZone.color,
-                          boxShadow: `0 0 6px ${currZone.color}60`,
-                        }} />
-                    );
-                  })()}
+                      {/* Current PR – range or point */}
+                      {(() => {
+                        const range = parseRangeBounds(res.currentPr);
+                        if (range) {
+                          const [lo, hi] = range;
+                          const segments = ZONES
+                            .filter(z => z.prMax > lo && z.prMin < hi)
+                            .map((z, si, arr) => ({
+                              vL: prToEqualPos(Math.max(lo, z.prMin)),
+                              vR: prToEqualPos(Math.min(hi, z.prMax)),
+                              color: z.color, first: si === 0, last: si === arr.length - 1,
+                            }));
+                          return (
+                            <>
+                              {segments.map((seg, si) => (
+                                <motion.div key={si}
+                                  initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: 1 }}
+                                  transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+                                  className="absolute z-30"
+                                  style={{
+                                    left: `${seg.vL}%`, width: `${Math.max(seg.vR - seg.vL, 0.3)}%`,
+                                    top: 3, bottom: 3, transformOrigin: 'left center',
+                                    backgroundColor: seg.color,
+                                    borderTop: `2px solid ${seg.color}`, borderBottom: `2px solid ${seg.color}`,
+                                    borderLeft: seg.first ? `2px solid ${seg.color}` : 'none',
+                                    borderRight: seg.last ? `2px solid ${seg.color}` : 'none',
+                                    borderRadius: seg.first && seg.last ? 3 : seg.first ? '3px 0 0 3px' : seg.last ? '0 3px 3px 0' : 0,
+                                  }} />
+                              ))}
+                            </>
+                          );
+                        }
+                        return (
+                          <motion.div
+                            initial={{ scaleY: 0, opacity: 0 }} animate={{ scaleY: 1, opacity: 1 }}
+                            transition={{ type: 'spring', bounce: 0.3, duration: 0.4 }}
+                            className="absolute z-30"
+                            style={{
+                              left: `${currVisPos}%`, top: 3, bottom: 3,
+                              transform: 'translateX(-50%)', transformOrigin: 'center',
+                              width: 5, borderRadius: 2, backgroundColor: currZone.color,
+                              boxShadow: `0 0 6px ${currZone.color}60`,
+                            }} />
+                        );
+                      })()}
 
-                  {/* Previous PR – outlined */}
-                  {prevVisPos !== null && (() => {
-                    const prevRange = res.previousPr !== undefined ? parseRangeBounds(res.previousPr) : null;
-                    const prevZoneColor = getZone(res.previousPr!).color;
-                    if (prevRange) {
-                      const vL = prToEqualPos(prevRange[0]), vR = prToEqualPos(prevRange[1]);
-                      return (
-                        <div style={{
-                          position: 'absolute', left: `${vL}%`, width: `${Math.max(vR - vL, 0.3)}%`,
-                          top: 4, bottom: 4, backgroundColor: 'white',
-                          border: `2px solid ${prevZoneColor}`, borderRadius: 3, zIndex: 20,
-                        }} />
-                      );
-                    }
-                    return (
-                      <div style={{
-                        position: 'absolute', left: `${prevVisPos}%`, top: 4, bottom: 4,
-                        transform: 'translateX(-50%)', width: 7, borderRadius: 2,
-                        backgroundColor: 'white', border: `2px solid ${prevZoneColor}`, zIndex: 20,
-                      }} />
-                    );
-                  })()}
+                      {/* Previous PR – outlined */}
+                      {prevVisPos !== null && (() => {
+                        const prevRange = res.previousPr !== undefined ? parseRangeBounds(res.previousPr) : null;
+                        const prevZoneColor = getZone(res.previousPr!).color;
+                        if (prevRange) {
+                          const vL = prToEqualPos(prevRange[0]), vR = prToEqualPos(prevRange[1]);
+                          return (
+                            <div style={{
+                              position: 'absolute', left: `${vL}%`, width: `${Math.max(vR - vL, 0.3)}%`,
+                              top: 4, bottom: 4, backgroundColor: 'white',
+                              border: `2px solid ${prevZoneColor}`, borderRadius: 3, zIndex: 20,
+                            }} />
+                          );
+                        }
+                        return (
+                          <div style={{
+                            position: 'absolute', left: `${prevVisPos}%`, top: 4, bottom: 4,
+                            transform: 'translateX(-50%)', width: 7, borderRadius: 2,
+                            backgroundColor: 'white', border: `2px solid ${prevZoneColor}`, zIndex: 20,
+                          }} />
+                        );
+                      })()}
+                    </>
+                  )}
                 </div>
               </div>
             );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Users, UserPlus, Search, Calendar, ArrowRight, Loader2, Archive, TableProperties } from 'lucide-react';
 import { usePatients } from '../hooks/usePatients';
@@ -37,13 +37,17 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
   const [npFilter, setNpFilter] = useState('');
   const [onlyOwn, setOnlyOwn] = useState(false);
   const [isExportingTAP, setIsExportingTAP] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const listRef = useRef<HTMLDivElement>(null);
+  const displayedRef = useRef<typeof patients>([]);
+  const focusedRef = useRef(-1);
 
   const handleTapDailyPDF = async () => {
     if (!encryptionKey) return;
     setIsExportingTAP(true);
     try {
       const data = await fetchAllActivePatients(encryptionKey);
-      exportTapDailyPDF(data);
+      await exportTapDailyPDF(data);
     } finally {
       setIsExportingTAP(false);
     }
@@ -62,6 +66,39 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
   const active = filtered.filter(p => p.status !== 'entlassen');
   const archived = filtered.filter(p => p.status === 'entlassen');
 
+  // Sync refs so keyboard handler always has current values
+  useEffect(() => { displayedRef.current = showArchive ? [...active, ...archived] : active; });
+  useEffect(() => { focusedRef.current = focusedIndex; });
+
+  // Reset focus when filters change
+  useEffect(() => { setFocusedIndex(-1); }, [searchTerm, npFilter, onlyOwn, showArchive]);
+
+  // Scroll focused row into view
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    listRef.current?.querySelector(`[data-row-index="${focusedIndex}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [focusedIndex]);
+
+  // Arrow keys + Enter navigation
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex(prev => Math.min(prev + 1, displayedRef.current.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter' && focusedRef.current >= 0) {
+        const p = displayedRef.current[focusedRef.current];
+        if (p) onSelectPatient(p.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onSelectPatient]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
@@ -71,15 +108,17 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
     );
   }
 
-  const PatientRow: React.FC<{ patient: typeof patients[0]; dimmed?: boolean }> = ({ patient, dimmed = false }) => {
+  const PatientRow: React.FC<{ patient: typeof patients[0]; dimmed?: boolean; isFocused?: boolean; index: number }> = ({ patient, dimmed = false, isFocused = false, index }) => {
     const badge = GESCHLECHT_BADGE[patient.geschlecht] ?? { label: '?', cls: 'bg-slate-100 text-slate-500' };
     return (
       <button
         key={patient.id}
+        data-row-index={index}
         onClick={() => onSelectPatient(patient.id)}
         className={cn(
           'w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all group text-left',
-          dimmed && 'opacity-60'
+          dimmed && 'opacity-60',
+          isFocused && 'bg-indigo-50 dark:bg-indigo-950/40 ring-2 ring-inset ring-indigo-300 dark:ring-indigo-700'
         )}
       >
         <div className="flex items-center gap-4">
@@ -216,9 +255,9 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
         </div>
 
         {/* Active patients */}
-        <div className="divide-y divide-slate-50 dark:divide-slate-700">
+        <div ref={listRef} className="divide-y divide-slate-50 dark:divide-slate-700">
           {active.length > 0 ? (
-            active.map(p => <PatientRow key={p.id} patient={p} />)
+            active.map((p, i) => <PatientRow key={p.id} patient={p} index={i} isFocused={focusedIndex === i} />)
           ) : (
             <div className="py-16 text-center">
               <div className="w-14 h-14 bg-slate-50 dark:bg-slate-700 rounded-3xl flex items-center justify-center text-slate-200 dark:text-slate-600 mx-auto mb-3">
@@ -246,7 +285,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
               </span>
             </div>
             <div className="divide-y divide-slate-50 dark:divide-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-              {archived.map(p => <PatientRow key={p.id} patient={p} dimmed />)}
+              {archived.map((p, i) => <PatientRow key={p.id} patient={p} dimmed index={active.length + i} isFocused={focusedIndex === active.length + i} />)}
             </div>
           </motion.div>
         )}

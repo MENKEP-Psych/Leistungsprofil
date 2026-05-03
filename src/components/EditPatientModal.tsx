@@ -9,7 +9,7 @@ interface EditPatientModalProps {
   isOpen: boolean;
   patient: Patient | null;
   onClose: () => void;
-  onSave: (updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>) => Promise<boolean>;
+  onSave: (updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation' | 'station' | 'zimmer'>>) => Promise<boolean>;
 }
 
 const inputCls =
@@ -25,6 +25,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
   const [neuropsychologin, setNeuropsychologin] = useState('');
   const [aufnahmedatum, setAufnahmedatum] = useState('');
   const [entlassdatum, setEntlassdatum] = useState('');
+  const [station, setStation] = useState('');
+  const [zimmer, setZimmer] = useState('');
   const [diagnose, setDiagnose] = useState('');
   const [andereText, setAndereText] = useState('');
   const [lokalisationSelections, setLokalisationSelections] = useState<string[]>([]);
@@ -47,6 +49,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
       setNeuropsychologin(patient.neuropsychologin ?? '');
       setAufnahmedatum(patient.aufnahmedatum ?? '');
       setEntlassdatum(patient.entlassdatum ?? '');
+      setStation(patient.station ?? '');
+      setZimmer(patient.zimmer ?? '');
 
       const stored = patient.diagnose ?? '';
       if (stored.startsWith('Andere: ')) {
@@ -102,6 +106,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
       entlassdatum: entlassdatum || undefined,
       diagnose: resolvedDiagnose || undefined,
       lokalisation: resolvedLokalisation || undefined,
+      station: station.trim() || undefined,
+      zimmer: zimmer.trim() || undefined,
     });
     setIsSubmitting(false);
     if (success) onClose();
@@ -219,6 +225,17 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({ isOpen, pati
                 <div className="space-y-2">
                   <label className={labelCls}>Entlassdatum (optional)</label>
                   <input type="date" value={entlassdatum} onChange={e => setEntlassdatum(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className={labelCls}>Station (optional)</label>
+                  <input type="text" value={station} onChange={e => setStation(e.target.value)} placeholder="z. B. Station 3" className={inputCls} />
+                </div>
+                <div className="space-y-2">
+                  <label className={labelCls}>Zimmer (optional)</label>
+                  <input type="text" value={zimmer} onChange={e => setZimmer(e.target.value)} placeholder="z. B. 214" className={inputCls} />
                 </div>
               </div>
 

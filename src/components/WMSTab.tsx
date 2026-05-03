@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import {
   Save, History, AlertCircle, CheckCircle2, Pencil, X, Brain,
   Trash2, Check, ListChecks, ChevronLeft, ChevronRight,
@@ -9,7 +10,7 @@ import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { PageHeader } from './TestForm';
+import { PageHeader, AbortButton, AbortBadge } from './TestForm';
 import wmsNormen from '../data/wms_iv_visuelle_wiedergabe_normen.json';
 import transformationNormen from '../data/testnormen_transformation.json';
 
@@ -674,6 +675,8 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
   const [editingId,    setEditingId]    = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [scoringMode,  setScoringMode]  = useState<'direct' | 'criteria'>('direct');
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const wmsResults = previousResults
     .filter(r => r.testId === 'wms_vw')
@@ -700,6 +703,8 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
     setWiedererkennen(res.rawValues.wiedererkennen !== undefined ? String(res.rawValues.wiedererkennen) : '');
     setDate(res.date); setExaminer(res.examiner ?? ''); setNote(res.note ?? '');
     setErrors({}); setScoringMode('direct');
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => {
@@ -707,10 +712,11 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
     setSofortig(''); setVerzoegert(''); setWiedererkennen('');
     setNote(''); setDate(new Date().toISOString().split('T')[0]); setExaminer('');
     setErrors({});
+    setAborted(false); setAbortComment('');
   };
 
   const handleSave = () => {
-    if (!validate()) return;
+    if (!aborted && !validate()) return;
     const c = computeAll(sofortig, verzoegert, wiedererkennen, age);
     const raw: Record<string, number | string> = {};
     const calc: Record<string, number> = {};
@@ -738,13 +744,18 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
       rawValues: raw, calculatedValues: calc, percentileRanks: prs,
       normInfo: `WMS-IV, Altersgruppe: ${c.ageGroupLabel ?? 'Unbekannt'}`,
       examiner, note, domainMapping: dom,
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);
     setSofortig(''); setVerzoegert(''); setWiedererkennen('');
     setNote(''); setDate(new Date().toISOString().split('T')[0]); setExaminer('');
+    setAborted(false); setAbortComment('');
   };
+
+  useShortcutSave(handleSave);
 
   const renderInput = (
     label: string, value: string, onChange: (v: string) => void,
@@ -864,6 +875,8 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
                     className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none" />
                 </div>
 
+                <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
+
                 <button onClick={handleSave}
                   className={cn('w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2',
                     lastSaved ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200')}>
@@ -910,7 +923,12 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
                       <tr key={res.id}
                         className={cn('hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors',
                           editingId === res.id && 'bg-indigo-50/60 dark:bg-indigo-900/30')}>
-                        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">{formatDate(res.date)}</td>
+                        <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            {formatDate(res.date)}
+                            {res.aborted && <AbortBadge comment={res.abortComment} />}
+                          </div>
+                        </td>
                         <td className="px-2 py-2.5 text-center font-mono text-slate-600 dark:text-slate-300">
                           {res.rawValues.sofortig ?? <span className="text-slate-300">–</span>}
                         </td>

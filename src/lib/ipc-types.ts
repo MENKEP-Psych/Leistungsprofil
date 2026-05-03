@@ -10,6 +10,8 @@ export interface RawPatient {
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
   encryptedLokalisation: string | null;
+  encryptedStation: string | null;
+  encryptedZimmer: string | null;
   status: string;
   createdBy: string | null;
   createdAt: number;
@@ -43,6 +45,8 @@ export interface PatientCreatePayload {
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
   encryptedLokalisation: string | null;
+  encryptedStation: string | null;
+  encryptedZimmer: string | null;
   encryptedGeneralNote: string;
   createdBy: string | null;
 }
@@ -57,6 +61,8 @@ export interface PatientUpdatePayload {
   encryptedEntlassdatum?: string | null;
   encryptedDiagnose?: string | null;
   encryptedLokalisation?: string | null;
+  encryptedStation?: string | null;
+  encryptedZimmer?: string | null;
   status?: string;
 }
 
@@ -141,6 +147,7 @@ export interface ElectronAPI {
   deleteUser: (username: string) => Promise<{ success: boolean; error?: string }>;
   getUsers: () => Promise<UserRow[]>;
   changePassword: (username: string, newPassword: string) => Promise<boolean>;
+  changeRole: (username: string, newRole: 'admin' | 'user') => Promise<{ success: boolean; error?: string }>;
 
   // DB path configuration
   getDbPath: () => Promise<string>;
@@ -161,4 +168,9 @@ export interface ElectronAPI {
   syncGetServerPath: () => Promise<string>;
   syncSetServerPath: (path: string) => Promise<{ success: boolean; error?: string }>;
   syncHasLocalChanges: () => Promise<boolean>;
+
+  // PDF
+  getPdfFolder: () => Promise<string>;
+  setPdfFolder: (folder: string) => Promise<{ success: boolean; error?: string }>;
+  savePdf: (filename: string, bytes: number[]) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
 }

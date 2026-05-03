@@ -27,6 +27,8 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
   const [neuropsychologin, setNeuropsychologin] = useState('');
   const [aufnahmedatum, setAufnahmedatum] = useState('');
   const [entlassdatum, setEntlassdatum] = useState('');
+  const [station, setStation] = useState('');
+  const [zimmer, setZimmer] = useState('');
   const [diagnose, setDiagnose] = useState('');
   const [andereText, setAndereText] = useState('');
   const [lokalisationSelections, setLokalisationSelections] = useState<string[]>([]);
@@ -43,6 +45,7 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
   const reset = () => {
     setVorname(''); setNachname(''); setGeburtsdatum(''); setGeschlecht('');
     setBildungsjahre(''); setNeuropsychologin(''); setAufnahmedatum(''); setEntlassdatum('');
+    setStation(''); setZimmer('');
     setDiagnose(''); setAndereText(''); setLokalisationSelections([]); setError(null);
   };
 
@@ -89,6 +92,8 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
       entlassdatum: entlassdatum || undefined,
       diagnose: resolvedDiagnose || undefined,
       lokalisation: resolvedLokalisation || undefined,
+      station: station.trim() || undefined,
+      zimmer: zimmer.trim() || undefined,
       status: 'aktiv',
       age: 0,
     });
@@ -208,6 +213,17 @@ export const CreatePatientModal: React.FC<CreatePatientModalProps> = ({ isOpen, 
                 <div className="space-y-2">
                   <label className={labelCls}>Entlassdatum (optional)</label>
                   <input type="date" value={entlassdatum} onChange={e => setEntlassdatum(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className={labelCls}>Station (optional)</label>
+                  <input type="text" value={station} onChange={e => setStation(e.target.value)} placeholder="z. B. Station 3" className={inputCls} />
+                </div>
+                <div className="space-y-2">
+                  <label className={labelCls}>Zimmer (optional)</label>
+                  <input type="text" value={zimmer} onChange={e => setZimmer(e.target.value)} placeholder="z. B. 214" className={inputCls} />
                 </div>
               </div>
 

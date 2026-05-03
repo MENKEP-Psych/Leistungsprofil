@@ -74,6 +74,8 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
             encrypted_aufnahmedatum  = lp.encrypted_aufnahmedatum,
             encrypted_entlassdatum   = lp.encrypted_entlassdatum,
             encrypted_general_note   = lp.encrypted_general_note,
+            encrypted_station        = lp.encrypted_station,
+            encrypted_zimmer         = lp.encrypted_zimmer,
             status                   = lp.status,
             updated_at               = lp.updated_at
         FROM local.patients AS lp

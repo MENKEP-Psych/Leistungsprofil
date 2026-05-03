@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { randomBytes } from 'crypto';
@@ -14,6 +14,7 @@ interface AppConfig {
   dbPath: string;
   serverDbPath?: string; // Path to master DB on the server share (e.g. G:\LP\leistungsprofil.sqlite)
   pullTime?: number;     // Unix timestamp (seconds) of the last successful pull
+  pdfFolder?: string;   // Default folder for PDF exports
 }
 
 function getConfigPath(): string {
@@ -111,12 +112,32 @@ function createWindow(): void {
     },
   });
 
+  mainWindow.maximize();
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
+
+  mainWindow.on('close', (e) => {
+    if (isDev) return; // No confirm in dev mode
+    e.preventDefault();
+    dialog.showMessageBox(mainWindow!, {
+      type: 'question',
+      buttons: ['Beenden', 'Abbrechen'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Leistungsprofil beenden',
+      message: 'Möchten Sie die Anwendung wirklich schließen?',
+      detail: 'Stellen Sie sicher, dass alle Änderungen synchronisiert wurden.',
+    }).then(({ response }) => {
+      if (response === 0) {
+        mainWindow?.destroy();
+      }
+    });
+  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -253,6 +274,36 @@ ipcMain.handle('sync:setServerPath', (_, newServerPath: string) => {
   }
 });
 
+ipcMain.handle('config:getPdfFolder', () => config.pdfFolder ?? '');
+
+ipcMain.handle('config:setPdfFolder', (_, folder: string) => {
+  try {
+    config.pdfFolder = folder || undefined;
+    saveConfig(config);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// Show native save dialog and write the PDF bytes to disk.
+// Returns { success: true, filePath } or { success: false, error }.
+ipcMain.handle('dialog:savePdf', async (_, filename: string, bytes: number[]) => {
+  const defaultDir = config.pdfFolder && fs.existsSync(config.pdfFolder) ? config.pdfFolder : app.getPath('documents');
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: 'PDF speichern',
+    defaultPath: path.join(defaultDir, filename),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) return { success: false, canceled: true };
+  try {
+    fs.writeFileSync(result.filePath, Buffer.from(bytes));
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 ipcMain.handle('sync:hasLocalChanges', () => {
   if (!config.pullTime) return false;
   return hasLocalChanges(config.dbPath, config.pullTime);
@@ -299,6 +350,9 @@ ipcMain.handle('db:deleteUser', (_, username: string) => db.deleteUser(username)
 ipcMain.handle('db:getUsers', () => db.getUsers());
 ipcMain.handle('db:changePassword', (_, username: string, newPassword: string) =>
   db.changePassword(username, newPassword)
+);
+ipcMain.handle('db:changeRole', (_, username: string, newRole: 'admin' | 'user') =>
+  db.changeRole(username, newRole)
 );
 
 ipcMain.handle('db:getDbPath', () => config.dbPath);

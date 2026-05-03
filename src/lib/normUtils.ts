@@ -2,6 +2,7 @@ import zztNormen from '../data/zzt_normen.json';
 import mosaikNormen from '../data/mosaik_normen.json';
 import zahlenspanneNormen from '../data/zahlenspanne_normen.json';
 import lgNormen from '../data/logisches_gedaechtnis_normen.json';
+import transformNormen from '../data/testnormen_transformation.json';
 
 // ── WP → PR standard mapping (M=10, SD=3, Wechsler scale) ────────────────────
 
@@ -137,20 +138,16 @@ export function lookupZahlenspanne(
   const group = getZahlenspanneAgeGroup(age);
   const prKey = direction === 'vorwaerts' ? 'pr_vorwaerts' : 'pr_rueckwaerts';
 
-  // Find exact rohwert match first
-  const exact = group.normen.find(n => n.rohwert === rohwert);
-  if (exact) {
-    const v = (exact as Record<string, number | null>)[prKey];
-    return typeof v === 'number' ? v : null;
-  }
-
-  // If no exact match, find nearest lower rohwert (higher=better, so look down)
-  const lower = group.normen
+  // Search from exact rohwert downward until a non-null PR is found
+  // This handles gaps in the norm table (e.g. rohwert=4 has null pr_vorwaerts
+  // but rohwert=5 has a valid value)
+  const candidates = group.normen
     .filter(n => n.rohwert <= rohwert)
-    .sort((a, b) => b.rohwert - a.rohwert)[0];
-  if (lower) {
-    const v = (lower as Record<string, number | null>)[prKey];
-    return typeof v === 'number' ? v : null;
+    .sort((a, b) => b.rohwert - a.rohwert);
+
+  for (const candidate of candidates) {
+    const v = (candidate as Record<string, number | null>)[prKey];
+    if (typeof v === 'number') return v;
   }
 
   return null;
@@ -215,6 +212,17 @@ export function lookupLGWiedererkennung(rohwert: number, age: number): string | 
       return row.pr_bereich;
     }
   }
+  return null;
+}
+
+// ── T-Wert → PR (Lienert-Transformationstabelle) ─────────────────────────────
+
+export function tWertToPR(tWert: number): number | null {
+  const rounded = Math.round(tWert);
+  const row = (transformNormen.normen as { T: number; PR: number }[]).find(r => r.T === rounded);
+  if (row) return row.PR;
+  if (rounded < 20) return 0;
+  if (rounded > 80) return 100;
   return null;
 }
 

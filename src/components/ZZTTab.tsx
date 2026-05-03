@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { Timer } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
@@ -6,7 +7,7 @@ import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupZZT } from '../lib/normUtils';
 import {
-  PrBadge, TestMeta, NoteField, FormSave,
+  PrBadge, TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
@@ -31,6 +32,8 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const ageAtTest = calculateAge(patient.geburtsdatum, date);
 
@@ -53,6 +56,7 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
+    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -66,13 +70,15 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
     setDate(res.date);
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
     const filled = parsedTimes.filter(t => t !== null);
-    if (filled.length === 0) return;
+    if (!aborted && filled.length === 0) return;
 
     const rawValues: Record<string, number | string> = {};
     ROUNDS.forEach((r, i) => {
@@ -93,6 +99,8 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
       percentileRanks: { zzt: pr },
       normInfo: 'TME Zahlen-Zeige-Test (ZZT) – Gesamtnorm',
       domainMapping: { zzt: '1. Aufmerksamkeit (Informationsverarbeitung)' },
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -100,6 +108,8 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
     setTimeout(() => setLastSaved(false), 3000);
     reset();
   };
+
+  useShortcutSave(handleSave);
 
   return (
     <div className="space-y-6">
@@ -153,6 +163,7 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
             )}
 
             <NoteField value={note} onChange={setNote} />
+            <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
             <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
           </div>
 
@@ -189,7 +200,12 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
                         editingId === res.id && 'bg-indigo-50/60 dark:bg-indigo-900/30',
                       )}
                     >
-                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{formatDate(res.date)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">
+                        <div className="flex items-center gap-1.5">
+                          {formatDate(res.date)}
+                          {res.aborted && <AbortBadge comment={res.abortComment} />}
+                        </div>
+                      </td>
                       <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">
                         {res.calculatedValues.wp}
                       </td>

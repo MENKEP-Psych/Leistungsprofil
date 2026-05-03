@@ -172,6 +172,30 @@ function lookupPR(
 const HIGHER_COLS = ['Dg1', 'Dg5', 'sumDg1_5', 'Dg6', 'Dg7', 'I', 'W', 'W_F'] as const;
 const LOWER_COLS  = ['Dg5_Dg6', 'Dg5_Dg7'] as const;
 
+// ── Exports for norm verification ─────────────────────────────────────────────
+
+/** All VLMT age groups with metadata, for use in the verification tab. */
+export const vlmtAgeGroups = vlmtNormen.altersgruppen.map(g => ({
+  label: g.label,
+  von: g.von,
+  bis: g.bis as number | null,
+}));
+
+/**
+ * Look up the PR for a single VLMT column + age group.
+ * Direction is inferred from the column name (same as calculateVLMTPR).
+ */
+export function lookupVLMTColPR(
+  rawScore: number,
+  column: string,
+  ageGroupLabel: string,
+): number | string {
+  const ag = vlmtNormen.altersgruppen.find(g => g.label === ageGroupLabel);
+  if (!ag) return 'n/a';
+  const dir: Direction = (LOWER_COLS as readonly string[]).includes(column) ? 'low' : 'high';
+  return lookupPR(rawScore, column, ag.normen as NormRow[], dir);
+}
+
 export interface VLMTInputs {
   Dg1: number;
   Dg2: number;
@@ -196,6 +220,55 @@ function getAgeGroup(age: number) {
     if (g.bis === null) return age >= g.von;
     return age >= g.von && age <= (g.bis as number);
   });
+}
+
+export interface VLMTPartialInputs {
+  Dg1?: number | null; Dg2?: number | null; Dg3?: number | null;
+  Dg4?: number | null; Dg5?: number | null; Dg6?: number | null;
+  Dg7?: number | null; I?: number | null; W?: number | null; W_F?: number | null;
+}
+
+/** Like calculateVLMTPR but accepts partial inputs — only computes PRs for values that are present. */
+export function calculateVLMTPRPartial(age: number, inputs: VLMTPartialInputs): {
+  prs: Record<string, number | string>;
+  calculated: Record<string, number>;
+  normInfo: string;
+} {
+  const ageGroup = getAgeGroup(age);
+  if (!ageGroup) return { prs: {}, calculated: {}, normInfo: 'Keine Normen für diese Altersgruppe.' };
+
+  const normen = ageGroup.normen as NormRow[];
+  const { Dg1, Dg2, Dg3, Dg4, Dg5, Dg6, Dg7, I, W, W_F } = inputs;
+  const calculated: Record<string, number> = {};
+
+  let sumDg1_5: number | null = null;
+  if (Dg1 != null && Dg2 != null && Dg3 != null && Dg4 != null && Dg5 != null) {
+    sumDg1_5 = Dg1 + Dg2 + Dg3 + Dg4 + Dg5;
+    calculated.sumDg1_5 = sumDg1_5;
+  }
+  let Dg5_Dg6: number | null = null;
+  if (Dg5 != null && Dg6 != null) { Dg5_Dg6 = Dg5 - Dg6; calculated.Dg5_Dg6 = Dg5_Dg6; }
+  let Dg5_Dg7: number | null = null;
+  if (Dg5 != null && Dg7 != null) { Dg5_Dg7 = Dg5 - Dg7; calculated.Dg5_Dg7 = Dg5_Dg7; }
+
+  const rawMap: Record<string, number | null> = {
+    Dg1: Dg1 ?? null, Dg5: Dg5 ?? null, sumDg1_5,
+    Dg6: Dg6 ?? null, Dg7: Dg7 ?? null, Dg5_Dg6, Dg5_Dg7,
+    I: I ?? null, W: W ?? null, W_F: W_F ?? null,
+  };
+
+  const prs: Record<string, number | string> = {};
+  for (const col of HIGHER_COLS) {
+    const raw = rawMap[col];
+    if (raw != null) prs[col] = lookupPR(raw, col, normen, 'high');
+  }
+  for (const col of LOWER_COLS) {
+    const raw = rawMap[col];
+    if (raw != null) prs[col] = lookupPR(raw, col, normen, 'low');
+  }
+
+  const nRef = ageGroup.n as Record<string, number>;
+  return { prs, calculated, normInfo: `Norm: ${ageGroup.label} (n=${nRef.Dg1 ?? '?'}), VLMT (Helmstaedter et al., 2001)` };
 }
 
 export function calculateVLMTPR(age: number, inputs: VLMTInputs): VLMTPRResult {

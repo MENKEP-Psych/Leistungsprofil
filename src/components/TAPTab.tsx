@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import {
   Bell, BellOff, Save, CheckCircle2,
   History, ChevronDown, ChevronUp, Trash2, Check, Zap,
+  StickyNote, X,
 } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { cn, formatDate } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { addNotification } from '../lib/notifications';
 import { QuadValues, QuadGrid, decodeQuad, encodeQuad } from './NeglectShared';
+import { AbortButton, AbortBadge } from './TestForm';
 
 // TODO: TAP-Normen als JSON einpflegen für automatische PR-Berechnung aus Rohwerten.
 // Aktuell werden PR-Werte manuell aus dem TAP-Protokollbogen abgelesen und eingetragen.
 // Normenquelle: Zimmermann & Fimm (2002/2012), TAP 2.3 Normierungsstichprobe.
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SF {
   gn_ver: '2.3' | 'M';
@@ -66,7 +69,7 @@ interface ColData {
   f: SF;
 }
 
-// ── PR Map exports (used by ProfileTab + exportPDF) ──────────────────────────
+// ── PR Map exports (used by ProfileTab + exportPDF) ───────────────────────────
 
 export const TAP_PR_MAP = [
   { key: 'alertnessM',         label: 'Alertness (TAP-M)',               domain: '1. Aufmerksamkeit (Alertness)' },
@@ -107,7 +110,7 @@ export const TAP_VE_PR_MAP = [
   { key: 've_spalten_r_pr', label: 'Vis. Scanning – Spalten r',     rawKey: 've_spalten_r', unit: '',   domain: '1. Aufmerksamkeit (Visuell)' },
 ] as const;
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Empty state ────────────────────────────────────────────────────────────────
 
 const emptyF = (): SF => ({
   gn_ver: '2.3', fl_ver: '2.3', ga_ver: '2.3', ve_ver: '2.3', gf_eye: 'BA',
@@ -146,7 +149,7 @@ const emptyCol = (user: string): ColData => ({
   f: emptyF(),
 });
 
-// ── Encode ────────────────────────────────────────────────────────────────────
+// ── Encode ─────────────────────────────────────────────────────────────────────
 
 const encodeCol = (col: ColData): TestResult => {
   const f = col.f;
@@ -212,12 +215,7 @@ const encodeCol = (col: ColData): TestResult => {
   };
 };
 
-// ── Layout constants ──────────────────────────────────────────────────────────
-
-const LW = 'w-36';   // 144px label column
-const NW = 'w-44';   // 176px notes column
-
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Primitive inputs ───────────────────────────────────────────────────────────
 
 const VerToggle: React.FC<{ value: '2.3' | 'M'; onChange: (v: '2.3' | 'M') => void }> = ({ value, onChange }) => (
   <div className="flex rounded overflow-hidden border border-slate-300 dark:border-slate-600 text-[9px] font-black shrink-0">
@@ -247,40 +245,39 @@ const FlagBtn: React.FC<{ flagged: boolean; onClick: () => void }> = ({ flagged,
     onClick={onClick}
     title={flagged ? 'Markierung aufheben' : 'Vor Entlassung wiederholen'}
     className={cn(
-      'p-1.5 rounded transition-colors shrink-0',
+      'p-1 rounded transition-colors shrink-0',
       flagged
         ? 'bg-orange-100 dark:bg-orange-950/40 text-orange-500'
         : 'text-slate-300 dark:text-slate-600 hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20',
     )}
   >
-    {flagged ? <Bell size={17} /> : <BellOff size={17} />}
+    {flagged ? <Bell size={13} /> : <BellOff size={13} />}
   </button>
 );
 
-const ValInput: React.FC<{
-  prefix?: string; value: string; onChange: (v: string) => void;
-  unit?: string; numeric?: boolean; placeholder?: string; wide?: boolean;
-}> = ({ prefix, value, onChange, unit, numeric = true, placeholder = '—', wide }) => (
+/** Raw value input — compact for table layout */
+const Val: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  numeric?: boolean;
+  placeholder?: string;
+  unit?: string;
+}> = ({ value, onChange, numeric = true, placeholder = '—', unit }) => (
   <div className="flex items-center gap-0.5">
-    {prefix && <span className="text-[9px] font-bold text-slate-400 w-5 text-right shrink-0">{prefix}</span>}
     <input
       type="text"
       inputMode={numeric ? 'numeric' : 'text'}
       value={value}
-      onChange={e => onChange(numeric ? e.target.value.replace(/\D/g, '') : e.target.value)}
+      onChange={e => onChange(numeric ? e.target.value.replace(/[^\d,.-]/g, '') : e.target.value)}
       placeholder={placeholder}
-      className={cn(
-        'text-[11px] text-center font-mono text-slate-700 dark:text-slate-200',
-        'bg-white dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600',
-        'rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400',
-        wide ? 'w-20' : 'w-14',
-      )}
+      className="w-14 text-[11px] text-center font-mono text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 rounded px-1 py-[3px] outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors"
     />
-    {unit && <span className="text-[9px] text-slate-400 shrink-0 ml-0.5">{unit}</span>}
+    {unit && <span className="text-[9px] text-slate-400 dark:text-slate-500 ml-0.5 shrink-0">{unit}</span>}
   </div>
 );
 
-const PrInput: React.FC<{ value: string; onChange: (v: string) => void; placeholder?: string }> = ({
+/** Percentile rank input — indigo tint */
+const PR: React.FC<{ value: string; onChange: (v: string) => void; placeholder?: string }> = ({
   value, onChange, placeholder = 'PR',
 }) => (
   <input
@@ -289,112 +286,201 @@ const PrInput: React.FC<{ value: string; onChange: (v: string) => void; placehol
     value={value}
     onChange={e => onChange(e.target.value)}
     placeholder={placeholder}
-    className="w-12 text-[11px] text-center font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400"
+    className="w-12 text-[11px] text-center font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-700 rounded px-1 py-[3px] outline-none focus:ring-1 focus:ring-indigo-400 transition-colors"
   />
 );
 
-/** A data row inside a TestBlock */
-const Row: React.FC<{ label: string; sub?: boolean; children: React.ReactNode }> = ({ label, sub, children }) => (
-  <div className="flex items-center border-t border-slate-200 dark:border-slate-700 min-h-[2.1rem]">
-    <div className={cn(
-      LW, 'shrink-0 px-3 py-1.5 flex items-center',
-      sub
-        ? 'text-[10px] text-slate-400 dark:text-slate-500 italic'
-        : 'text-[11px] font-bold text-slate-600 dark:text-slate-300',
-    )}>
-      {label}
-    </div>
-    <div className="flex-1 border-l border-slate-200 dark:border-slate-700 px-2.5 py-1.5 flex flex-wrap items-center gap-1.5">
-      {children}
-    </div>
-  </div>
-);
+// ── Grid table primitives ──────────────────────────────────────────────────────
 
-/** Sub-section label (e.g. "ohne Warnton") */
-const SubHeader: React.FC<{ label: string }> = ({ label }) => (
-  <div className="border-t border-slate-200 dark:border-slate-700 px-3 py-1 bg-slate-50 dark:bg-slate-800/40">
-    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 italic">{label}</span>
-  </div>
-);
-
-/** Two-column value grid: left = M/s/F/A inputs, right = PR inputs */
-const TGrid: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="border-t border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-x-3 gap-y-1.5 px-3 py-2">
-    {children}
-  </div>
-);
-
-/** Full-width section divider between test groups */
-const SectionDivider: React.FC<{ label: string }> = ({ label }) => (
-  <div className="border-t-2 border-slate-400 dark:border-slate-500 bg-slate-200 dark:bg-slate-700 px-3 py-1.5">
-    <span className="text-[9px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest">{label}</span>
-  </div>
-);
-
-/** TestBlock: block header + data rows (left) + notes textarea (right) */
-const TestBlock: React.FC<{
-  label: string; badge?: string; testKey: string;
-  verKey?: 'gn_ver' | 'fl_ver' | 'ga_ver' | 've_ver';
-  eyeKey?: boolean;
-  col: ColData; upd: (f: Partial<SF>) => void;
-  children: React.ReactNode;
-}> = ({ label, badge, testKey, verKey, eyeKey, col, upd, children }) => {
-  const flagKey = `flag_${testKey}` as keyof SF;
-  const noteKey = `note_${testKey}` as keyof SF;
-  return (
-    <div className="flex border-t-2 border-slate-300 dark:border-slate-600">
-      {/* Left: block header + rows */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
-          <span className="text-[12px] font-black text-slate-700 dark:text-slate-200">{label}</span>
-          {badge && (
-            <span className="text-[9px] font-bold px-1.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400">{badge}</span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            {verKey && <VerToggle value={col.f[verKey] as '2.3' | 'M'} onChange={v => upd({ [verKey]: v })} />}
-            {eyeKey && <EyeToggle value={col.f.gf_eye} onChange={v => upd({ gf_eye: v })} />}
-            <FlagBtn flagged={col.f[flagKey] as boolean} onClick={() => upd({ [flagKey]: !(col.f[flagKey] as boolean) })} />
-          </div>
-        </div>
-        {children}
+/** Section header spanning full table width */
+const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
+  <tr>
+    <td colSpan={99} className="pt-4 pb-1 px-3">
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest whitespace-nowrap">
+          {label}
+        </span>
+        <div className="flex-1 h-px bg-indigo-100 dark:bg-indigo-900/50" />
       </div>
-      {/* Right: notes */}
-      <div className={cn(NW, 'shrink-0 border-l-2 border-slate-300 dark:border-slate-600 p-2 bg-sky-50/20 dark:bg-sky-950/10')}>
-        <textarea
-          value={col.f[noteKey] as string}
-          onChange={e => upd({ [noteKey]: e.target.value })}
-          placeholder="Anmerkung…"
-          className="w-full h-full min-h-[5rem] resize-none text-[11px] text-slate-700 dark:text-slate-200 bg-transparent outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600 leading-relaxed"
-        />
-      </div>
-    </div>
-  );
-};
+    </td>
+  </tr>
+);
 
-/** Quad grid row (single column) inside a TestBlock */
-const QuadRow: React.FC<{
+/** Sub-label row (e.g. "ohne Warnton", "Auditiv") — indented under a test group */
+const SubRow: React.FC<{ label: string }> = ({ label }) => (
+  <tr>
+    <td colSpan={99} className="px-3 pt-2 pb-0.5">
+      <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">
+        {label}
+      </span>
+    </td>
+  </tr>
+);
+
+/**
+ * One data row: test label | cells (each is a Val or PR or empty)
+ * Pass flagged/onFlag/verToggle/noteValue/onNoteChange for the row controls.
+ */
+interface DataRowProps {
   label: string;
+  badge?: string;
+  indent?: boolean;
+  flagged?: boolean;
+  onFlag?: () => void;
+  verToggle?: React.ReactNode;
+  eyeToggle?: React.ReactNode;
+  noteValue?: string;
+  onNoteChange?: (v: string) => void;
+  activeNote?: boolean;
+  onToggleNote?: () => void;
+  children: React.ReactNode; // the <td> cells
+}
+
+const DataRow: React.FC<DataRowProps> = ({
+  label, badge, indent, flagged, onFlag, verToggle, eyeToggle,
+  noteValue, onNoteChange, activeNote, onToggleNote, children,
+}) => (
+  <tr className={cn(
+    'group transition-colors',
+    flagged
+      ? 'bg-orange-50/60 dark:bg-orange-950/10'
+      : 'hover:bg-slate-50/60 dark:hover:bg-slate-700/20',
+  )}>
+    {/* Label cell */}
+    <td className={cn(
+      'px-3 py-1.5 whitespace-nowrap align-middle border-r border-slate-100 dark:border-slate-700/60',
+      flagged ? 'border-orange-100 dark:border-orange-900/40' : '',
+    )}>
+      <div className="flex items-center gap-1.5">
+        {indent && <span className="w-3 shrink-0" />}
+        <span className={cn(
+          'text-[11px] font-bold text-slate-700 dark:text-slate-200',
+          flagged && 'text-orange-700 dark:text-orange-300',
+        )}>{label}</span>
+        {badge && (
+          <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 leading-none shrink-0">
+            {badge}
+          </span>
+        )}
+      </div>
+    </td>
+
+    {/* Data cells */}
+    {children}
+
+    {/* Controls cell */}
+    <td className="pl-2 pr-3 py-1.5 align-middle">
+      <div className="flex items-center gap-1">
+        {verToggle}
+        {eyeToggle}
+        {onNoteChange && (
+          <button
+            type="button"
+            onClick={onToggleNote}
+            title="Anmerkung"
+            className={cn(
+              'p-1 rounded transition-colors',
+              activeNote || (noteValue && noteValue.trim())
+                ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/30'
+                : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700',
+            )}
+          >
+            <StickyNote size={12} />
+          </button>
+        )}
+        {onFlag && <FlagBtn flagged={!!flagged} onClick={onFlag} />}
+      </div>
+    </td>
+  </tr>
+);
+
+/** Inline note row — shown below a DataRow when note is open */
+const NoteRow: React.FC<{ value: string; onChange: (v: string) => void; onClose: () => void }> = ({
+  value, onChange, onClose,
+}) => (
+  <tr className="bg-amber-50/40 dark:bg-amber-950/10">
+    <td colSpan={99} className="px-3 pb-2 pt-0.5">
+      <div className="flex items-start gap-1.5">
+        <textarea
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Anmerkung…"
+          rows={1}
+          autoFocus
+          className="flex-1 text-[11px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700/40 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5 resize-none outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 leading-relaxed overflow-hidden transition-colors"
+          onInput={e => {
+            const t = e.currentTarget;
+            t.style.height = 'auto';
+            t.style.height = `${t.scrollHeight}px`;
+          }}
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-1.5 p-1 rounded text-slate-300 hover:text-slate-500 transition-colors"
+        >
+          <X size={11} />
+        </button>
+      </div>
+    </td>
+  </tr>
+);
+
+/** Empty/dash cell for columns that don't apply to a row */
+const Empty: React.FC = () => (
+  <td className="px-1.5 py-1.5 align-middle text-center">
+    <span className="text-[10px] text-slate-200 dark:text-slate-700 select-none">·</span>
+  </td>
+);
+
+/** A cell containing a Val input */
+const VCell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <td className="px-1.5 py-1.5 align-middle">{children}</td>
+);
+
+/** A cell containing a PR input — slightly tinted background to reinforce grouping */
+const PCell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <td className="px-1 py-1.5 align-middle bg-indigo-50/30 dark:bg-indigo-950/10">{children}</td>
+);
+
+/** Column group header */
+const ColHead: React.FC<{ label: string; pr?: boolean; span?: number }> = ({ label, pr, span = 1 }) => (
+  <th
+    colSpan={span}
+    className={cn(
+      'px-1.5 py-2 text-[9px] font-black uppercase tracking-wide text-center whitespace-nowrap',
+      pr
+        ? 'text-indigo-400 dark:text-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20'
+        : 'text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800',
+    )}
+  >
+    {label}
+  </th>
+);
+
+// ── Quad section (Gesichtsfeld / Neglect) ──────────────────────────────────────
+
+const QuadSection: React.FC<{
   mq: QuadValues; aq: QuadValues;
   onMq: (q: QuadValues) => void; onAq: (q: QuadValues) => void;
-}> = ({ label, mq, aq, onMq, onAq }) => (
-  <div className="flex items-start border-t border-slate-200 dark:border-slate-700">
-    <div className={cn(LW, 'shrink-0 px-3 py-2 text-[10px] text-slate-400 dark:text-slate-500 italic flex items-start')}>
-      {label}
-    </div>
-    <div className="flex-1 border-l border-slate-200 dark:border-slate-700 px-2.5 py-2 flex items-start gap-4">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] font-bold text-slate-400">M</span>
-        <QuadGrid value={mq} onChange={onMq} shape="cross" />
+}> = ({ mq, aq, onMq, onAq }) => (
+  <tr>
+    <td colSpan={99} className="px-3 pb-2 pt-1">
+      <div className="flex items-center gap-5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">MQ</span>
+          <QuadGrid value={mq} onChange={onMq} shape="cross" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">AQ</span>
+          <QuadGrid value={aq} onChange={onAq} shape="circle" />
+        </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9px] font-bold text-slate-400">A</span>
-        <QuadGrid value={aq} onChange={onAq} shape="circle" />
-      </div>
-    </div>
-  </div>
+    </td>
+  </tr>
 );
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
 interface TAPTabProps {
   patient: Patient;
@@ -411,9 +497,17 @@ export const TAPTab: React.FC<TAPTabProps> = ({
   const [col, setCol] = useState<ColData>(() => emptyCol(currentUser ?? ''));
   const [saved, setSaved] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState(false);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [nichtErschienen, setNichtErschienen] = useState(false);
   const [nichtErschienienTest, setNichtErschienienTest] = useState('');
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
+
+  // Track which notes are open
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set());
+  const toggleNote = (key: string) =>
+    setOpenNotes(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
 
   const upd = (f: Partial<SF>) => setCol(prev => ({ ...prev, f: { ...prev.f, ...f } }));
 
@@ -421,9 +515,10 @@ export const TAPTab: React.FC<TAPTabProps> = ({
     const id = col.id ?? Date.now().toString();
     const saveDate = col.date || new Date().toISOString().split('T')[0];
     const result = encodeCol({ ...col, id, date: saveDate });
+    result.aborted = aborted || undefined;
+    result.abortComment = aborted ? abortComment : undefined;
     onSave(result);
 
-    // Auto-notification when patient did not appear
     if (nichtErschienen && patient.neuropsychologin && currentUser && patient.neuropsychologin !== currentUser) {
       const gebDatum = patient.geburtsdatum
         ? new Date(patient.geburtsdatum).toLocaleDateString('de-DE')
@@ -439,18 +534,33 @@ export const TAPTab: React.FC<TAPTabProps> = ({
     setCol(emptyCol(currentUser ?? ''));
     setNichtErschienen(false);
     setNichtErschienienTest('');
+    setAborted(false);
+    setAbortComment('');
+    setOpenNotes(new Set());
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
+
+  useShortcutSave(handleSave);
 
   const tapResults = previousResults
     .filter(r => r.testId === 'tap')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // Helper to build note-row helper inline
+  const maybeNote = (key: string, noteKey: keyof SF) =>
+    openNotes.has(key) ? (
+      <NoteRow
+        value={col.f[noteKey] as string}
+        onChange={v => upd({ [noteKey]: v })}
+        onClose={() => toggleNote(key)}
+      />
+    ) : null;
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
 
       {/* Page header */}
       <div className="flex items-center gap-4">
@@ -466,319 +576,566 @@ export const TAPTab: React.FC<TAPTabProps> = ({
         </div>
       </div>
 
-      {/* ── MAIN FORM ── */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border-2 border-slate-300 dark:border-slate-600 shadow-sm overflow-x-auto">
-
-        {/* Column header row */}
-        <div className="flex bg-indigo-600 text-white">
-          <div className={cn(LW, 'shrink-0 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest')}>Testverfahren</div>
-          <div className="flex-1 border-l border-indigo-500 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest">Werte</div>
-          <div className={cn(NW, 'shrink-0 border-l border-indigo-500 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest')}>Anmerkungen</div>
-        </div>
-
-        {/* Date / Examiner / Save row */}
-        <div className="flex border-b-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60">
-          <div className={cn(LW, 'shrink-0 flex items-center px-3 py-2 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest')}>
-            Datum · Untersucher
+      {/* Date / Examiner / Save */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+        <input
+          type="date"
+          value={col.date}
+          onChange={e => setCol({ ...col, date: e.target.value })}
+          className="text-[11px] px-2 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700 dark:text-slate-200"
+        />
+        <input
+          type="text"
+          value={col.examiner}
+          onChange={e => setCol({ ...col, examiner: e.target.value })}
+          placeholder="Untersucher"
+          className="text-[11px] px-2 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700 dark:text-slate-200 w-28"
+        />
+        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={nichtErschienen}
+            onChange={e => { setNichtErschienen(e.target.checked); if (!e.target.checked) setNichtErschienienTest(''); }}
+            className="w-3.5 h-3.5 rounded accent-rose-500 cursor-pointer"
+          />
+          <span className="text-[10px] font-bold text-rose-500">Nicht erschienen</span>
+        </label>
+        {nichtErschienen && (
+          <select
+            value={nichtErschienienTest}
+            onChange={e => setNichtErschienienTest(e.target.value)}
+            className="text-[10px] px-1.5 py-1.5 bg-slate-50 dark:bg-slate-700 border border-rose-300 dark:border-rose-700 rounded-lg outline-none focus:ring-1 focus:ring-rose-400 text-slate-700 dark:text-slate-200"
+          >
+            <option value="">— Test (optional) —</option>
+            <option value="Alertness (TAP-M)">Alertness (TAP-M)</option>
+            <option value="Alertness (TAP 2.3)">Alertness (TAP 2.3)</option>
+            <option value="Go/Nogo 1">Go/Nogo 1</option>
+            <option value="Go/Nogo 2">Go/Nogo 2</option>
+            <option value="Flexibilität">Flexibilität</option>
+            <option value="Geteilte Aufmerksamkeit">Geteilte Aufmerksamkeit</option>
+            <option value="Vigilanz">Vigilanz</option>
+            <option value="Arbeitsgedächtnis">Arbeitsgedächtnis</option>
+            <option value="Visuelles Scanning">Visuelles Scanning</option>
+            <option value="Gesichtsfeld">Gesichtsfeld</option>
+            <option value="Neglect">Neglect</option>
+          </select>
+        )}
+        <button
+          onClick={handleSave}
+          className={cn(
+            'flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-black transition-all ml-auto',
+            saved ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700',
+          )}
+        >
+          {saved ? <><CheckCircle2 size={13} /> Gespeichert</> : <><Save size={13} /> Speichern</>}
+        </button>
+        {aborted && (
+          <div className="w-full mt-2">
+            <textarea
+              value={abortComment}
+              onChange={e => setAbortComment(e.target.value)}
+              placeholder="Grund für Abbruch…"
+              rows={1}
+              className="w-full px-3 py-1.5 text-[11px] border border-orange-300 rounded-lg bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700 dark:text-slate-200 outline-none resize-none placeholder:text-orange-300"
+            />
           </div>
-          <div className="flex-1 border-l border-slate-300 dark:border-slate-600 px-2 py-2 flex flex-wrap items-center gap-2">
-            <input
-              type="date"
-              value={col.date}
-              onChange={e => setCol({ ...col, date: e.target.value })}
-              className="text-[11px] px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700 dark:text-slate-200"
-            />
-            <input
-              type="text"
-              value={col.examiner}
-              onChange={e => setCol({ ...col, examiner: e.target.value })}
-              placeholder="Untersucher"
-              className="text-[11px] px-2 py-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-1 focus:ring-indigo-400 text-slate-700 dark:text-slate-200 w-28"
-            />
-            <label className="flex items-center gap-1.5 cursor-pointer select-none ml-1">
-              <input
-                type="checkbox"
-                checked={nichtErschienen}
-                onChange={e => { setNichtErschienen(e.target.checked); if (!e.target.checked) setNichtErschienienTest(''); }}
-                className="w-3.5 h-3.5 rounded accent-rose-500 cursor-pointer"
-              />
-              <span className="text-[10px] font-bold text-rose-500">Nicht erschienen</span>
-            </label>
-            {nichtErschienen && (
-              <select
-                value={nichtErschienienTest}
-                onChange={e => setNichtErschienienTest(e.target.value)}
-                className="text-[10px] px-1.5 py-1 bg-white dark:bg-slate-700 border border-rose-300 dark:border-rose-700 rounded-lg outline-none focus:ring-1 focus:ring-rose-400 text-slate-700 dark:text-slate-200"
-              >
-                <option value="">— Test (optional) —</option>
-                <option value="Alertness (TAP-M)">Alertness (TAP-M)</option>
-                <option value="Alertness (TAP 2.3)">Alertness (TAP 2.3)</option>
-                <option value="Go/Nogo 1">Go/Nogo 1</option>
-                <option value="Go/Nogo 2">Go/Nogo 2</option>
-                <option value="Flexibilität">Flexibilität</option>
-                <option value="Geteilte Aufmerksamkeit">Geteilte Aufmerksamkeit</option>
-                <option value="Vigilanz">Vigilanz</option>
-                <option value="Arbeitsgedächtnis">Arbeitsgedächtnis</option>
-                <option value="Visuelles Scanning">Visuelles Scanning</option>
-                <option value="Gesichtsfeld">Gesichtsfeld</option>
-                <option value="Neglect">Neglect</option>
-              </select>
-            )}
-            <button
-              onClick={handleSave}
-              className={cn(
-                'flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ml-auto',
-                saved ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700',
-              )}
+        )}
+      </div>
+
+      {/* Abort toggle */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setAborted(!aborted)}
+          className={aborted
+            ? 'w-full flex items-center gap-2 px-4 py-2 text-[11px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
+            : 'w-full flex items-center gap-2 px-4 py-2 text-[11px] font-bold text-slate-400 hover:text-orange-600 dark:hover:text-orange-400'}
+        >
+          <span className="text-base leading-none">⊗</span>
+          {aborted ? 'Test als abgebrochen markiert — klicken zum Aufheben' : 'Test abgebrochen / unvollständig'}
+        </button>
+      </div>
+
+      {/* ══ MAIN GRID TABLE ══ */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-700">
+              {/* sticky label column */}
+              <th className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 whitespace-nowrap w-40">
+                Test
+              </th>
+              {/* RT / M */}
+              <ColHead label="M / RT" />
+              <ColHead label="PR" pr />
+              {/* SD */}
+              <ColHead label="SD" />
+              <ColHead label="PR-SD" pr />
+              {/* Fehler */}
+              <ColHead label="Fehler" />
+              <ColHead label="PR-F" pr />
+              {/* Auslassungen */}
+              <ColHead label="Ausl." />
+              <ColHead label="PR-A" pr />
+              {/* Extra columns for tests that need them */}
+              <ColHead label="Zusatz" />
+              <ColHead label="PR-Z" pr />
+              {/* Controls */}
+              <th className="px-3 py-2 bg-slate-50 dark:bg-slate-800 w-24" />
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+
+            {/* ══ ALERTNESS ══ */}
+            <SectionHeader label="Alertness" />
+
+            {/* Alertness TAP-M */}
+            <DataRow
+              label="Alertness"
+              badge="M"
+              flagged={col.f.flag_alM}
+              onFlag={() => upd({ flag_alM: !col.f.flag_alM })}
+              noteValue={col.f.note_alM}
+              onNoteChange={v => upd({ note_alM: v })}
+              activeNote={openNotes.has('alM')}
+              onToggleNote={() => toggleNote('alM')}
             >
-              {saved ? <><CheckCircle2 size={12} /> Gespeichert</> : <><Save size={12} /> Speichern</>}
-            </button>
-          </div>
-          <div className={cn(NW, 'shrink-0 border-l-2 border-slate-300 dark:border-slate-600')} />
-        </div>
+              <VCell><Val value={col.f.alM_rt} onChange={v => upd({ alM_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.alM_pr} onChange={v => upd({ alM_pr: v })} /></PCell>
+              <VCell><Val value={col.f.alM_sd} onChange={v => upd({ alM_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.alM_sd_pr} onChange={v => upd({ alM_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('alM', 'note_alM')}
 
-        {/* ══════════ ALERTNESS ══════════ */}
-        <SectionDivider label="Alertness" />
+            {/* Alertness 2.3 ohne Warnton */}
+            <SubRow label="2.3 – ohne Warnton" />
+            <DataRow
+              label="Alertness"
+              badge="2.3"
+              indent
+              flagged={col.f.flag_al23}
+              onFlag={() => upd({ flag_al23: !col.f.flag_al23 })}
+              noteValue={col.f.note_al23}
+              onNoteChange={v => upd({ note_al23: v })}
+              activeNote={openNotes.has('al23')}
+              onToggleNote={() => toggleNote('al23')}
+            >
+              <VCell><Val value={col.f.al23_ohne_rt} onChange={v => upd({ al23_ohne_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.al23_ohne_pr} onChange={v => upd({ al23_ohne_pr: v })} /></PCell>
+              <VCell><Val value={col.f.al23_ohne_sd} onChange={v => upd({ al23_ohne_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.al23_ohne_sd_pr} onChange={v => upd({ al23_ohne_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
 
-        <TestBlock label="Alertness" badge="[M]" testKey="alM" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.alM_rt} onChange={v => upd({ alM_rt: v })} unit="ms" />
-            <PrInput value={col.f.alM_pr} onChange={v => upd({ alM_pr: v })} />
-            <ValInput prefix="s=" value={col.f.alM_sd} onChange={v => upd({ alM_sd: v })} unit="ms" />
-            <PrInput value={col.f.alM_sd_pr} onChange={v => upd({ alM_sd_pr: v })} placeholder="PR-SD" />
-          </TGrid>
-        </TestBlock>
+            {/* Alertness 2.3 mit Warnton */}
+            <SubRow label="2.3 – mit Warnton 🔊" />
+            <DataRow
+              label="Alertness"
+              badge="2.3"
+              indent
+              flagged={col.f.flag_al23}
+            >
+              <VCell><Val value={col.f.al23_mit_rt} onChange={v => upd({ al23_mit_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.al23_mit_pr} onChange={v => upd({ al23_mit_pr: v })} /></PCell>
+              <VCell><Val value={col.f.al23_mit_sd} onChange={v => upd({ al23_mit_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.al23_mit_sd_pr} onChange={v => upd({ al23_mit_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
 
-        <TestBlock label="Alertness" badge="[2.3]" testKey="al23" col={col} upd={upd}>
-          <SubHeader label="ohne Warnton" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.al23_ohne_rt} onChange={v => upd({ al23_ohne_rt: v })} unit="ms" />
-            <PrInput value={col.f.al23_ohne_pr} onChange={v => upd({ al23_ohne_pr: v })} />
-            <ValInput prefix="s=" value={col.f.al23_ohne_sd} onChange={v => upd({ al23_ohne_sd: v })} unit="ms" />
-            <PrInput value={col.f.al23_ohne_sd_pr} onChange={v => upd({ al23_ohne_sd_pr: v })} placeholder="PR-SD" />
-          </TGrid>
-          <SubHeader label="mit Warnton 🔊" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.al23_mit_rt} onChange={v => upd({ al23_mit_rt: v })} unit="ms" />
-            <PrInput value={col.f.al23_mit_pr} onChange={v => upd({ al23_mit_pr: v })} />
-            <ValInput prefix="s=" value={col.f.al23_mit_sd} onChange={v => upd({ al23_mit_sd: v })} unit="ms" />
-            <PrInput value={col.f.al23_mit_sd_pr} onChange={v => upd({ al23_mit_sd_pr: v })} placeholder="PR-SD" />
-          </TGrid>
-          <TGrid>
-            <ValInput value={col.f.al23_phasisch} onChange={v => upd({ al23_phasisch: v })} numeric={false} placeholder="Phasisch" />
-            <PrInput value={col.f.al23_pr} onChange={v => upd({ al23_pr: v })} placeholder="PR ges." />
-          </TGrid>
-        </TestBlock>
+            {/* Phasische Alertness */}
+            <SubRow label="2.3 – Phasische Alertness" />
+            <DataRow
+              label="Phasisch"
+              indent
+              flagged={col.f.flag_al23}
+            >
+              {/* Kennwert goes in the M/RT column */}
+              <VCell><Val value={col.f.al23_phasisch} onChange={v => upd({ al23_phasisch: v })} numeric={false} placeholder="Kennwert" /></VCell>
+              <PCell><PR value={col.f.al23_pr} onChange={v => upd({ al23_pr: v })} placeholder="PR ges." /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('al23', 'note_al23')}
 
-        {/* ══════════ SELEKTIVE AUFMERKSAMKEIT ══════════ */}
-        <SectionDivider label="Selektive Aufmerksamkeit" />
+            {/* ══ SELEKTIVE AUFMERKSAMKEIT ══ */}
+            <SectionHeader label="Selektive Aufmerksamkeit" />
 
-        <TestBlock label="Go/Nogo 1" testKey="gn" verKey="gn_ver" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.gn_rt} onChange={v => upd({ gn_rt: v })} unit="ms" />
-            <PrInput value={col.f.gn_pr} onChange={v => upd({ gn_pr: v })} />
-            <ValInput prefix="s=" value={col.f.gn_sd} onChange={v => upd({ gn_sd: v })} unit="ms" />
-            <PrInput value={col.f.gn_sd_pr} onChange={v => upd({ gn_sd_pr: v })} placeholder="PR-SD" />
-            <ValInput prefix="F=" value={col.f.gn_fehler} onChange={v => upd({ gn_fehler: v })} />
-            <span />
-            <ValInput prefix="A=" value={col.f.gn_ausl} onChange={v => upd({ gn_ausl: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            <DataRow
+              label="Go/Nogo 1"
+              flagged={col.f.flag_gn}
+              onFlag={() => upd({ flag_gn: !col.f.flag_gn })}
+              verToggle={<VerToggle value={col.f.gn_ver} onChange={v => upd({ gn_ver: v })} />}
+              noteValue={col.f.note_gn}
+              onNoteChange={v => upd({ note_gn: v })}
+              activeNote={openNotes.has('gn')}
+              onToggleNote={() => toggleNote('gn')}
+            >
+              <VCell><Val value={col.f.gn_rt} onChange={v => upd({ gn_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.gn_pr} onChange={v => upd({ gn_pr: v })} /></PCell>
+              <VCell><Val value={col.f.gn_sd} onChange={v => upd({ gn_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.gn_sd_pr} onChange={v => upd({ gn_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <VCell><Val value={col.f.gn_fehler} onChange={v => upd({ gn_fehler: v })} /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.gn_ausl} onChange={v => upd({ gn_ausl: v })} /></VCell>
+              <Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('gn', 'note_gn')}
 
-        <TestBlock label="Go/Nogo 2" badge="[2.3]" testKey="gn2" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.gn2_rt} onChange={v => upd({ gn2_rt: v })} unit="ms" />
-            <PrInput value={col.f.gn2_pr} onChange={v => upd({ gn2_pr: v })} />
-            <ValInput prefix="s=" value={col.f.gn2_sd} onChange={v => upd({ gn2_sd: v })} unit="ms" />
-            <PrInput value={col.f.gn2_sd_pr} onChange={v => upd({ gn2_sd_pr: v })} placeholder="PR-SD" />
-            <ValInput prefix="F=" value={col.f.gn2_fehler} onChange={v => upd({ gn2_fehler: v })} />
-            <span />
-            <ValInput prefix="A=" value={col.f.gn2_ausl} onChange={v => upd({ gn2_ausl: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            <DataRow
+              label="Go/Nogo 2"
+              badge="2.3"
+              flagged={col.f.flag_gn2}
+              onFlag={() => upd({ flag_gn2: !col.f.flag_gn2 })}
+              noteValue={col.f.note_gn2}
+              onNoteChange={v => upd({ note_gn2: v })}
+              activeNote={openNotes.has('gn2')}
+              onToggleNote={() => toggleNote('gn2')}
+            >
+              <VCell><Val value={col.f.gn2_rt} onChange={v => upd({ gn2_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.gn2_pr} onChange={v => upd({ gn2_pr: v })} /></PCell>
+              <VCell><Val value={col.f.gn2_sd} onChange={v => upd({ gn2_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.gn2_sd_pr} onChange={v => upd({ gn2_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <VCell><Val value={col.f.gn2_fehler} onChange={v => upd({ gn2_fehler: v })} /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.gn2_ausl} onChange={v => upd({ gn2_ausl: v })} /></VCell>
+              <Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('gn2', 'note_gn2')}
 
-        <TestBlock label="Flexibilität" testKey="fl" verKey="fl_ver" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.fl_rt} onChange={v => upd({ fl_rt: v })} unit="ms" />
-            <PrInput value={col.f.fl_pr} onChange={v => upd({ fl_pr: v })} />
-            <ValInput prefix="s=" value={col.f.fl_sd} onChange={v => upd({ fl_sd: v })} unit="ms" />
-            <PrInput value={col.f.fl_sd_pr} onChange={v => upd({ fl_sd_pr: v })} placeholder="PR-SD" />
-            <ValInput prefix="F=" value={col.f.fl_fehler} onChange={v => upd({ fl_fehler: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            <DataRow
+              label="Flexibilität"
+              flagged={col.f.flag_fl}
+              onFlag={() => upd({ flag_fl: !col.f.flag_fl })}
+              verToggle={<VerToggle value={col.f.fl_ver} onChange={v => upd({ fl_ver: v })} />}
+              noteValue={col.f.note_fl}
+              onNoteChange={v => upd({ note_fl: v })}
+              activeNote={openNotes.has('fl')}
+              onToggleNote={() => toggleNote('fl')}
+            >
+              <VCell><Val value={col.f.fl_rt} onChange={v => upd({ fl_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.fl_pr} onChange={v => upd({ fl_pr: v })} /></PCell>
+              <VCell><Val value={col.f.fl_sd} onChange={v => upd({ fl_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.fl_sd_pr} onChange={v => upd({ fl_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <VCell><Val value={col.f.fl_fehler} onChange={v => upd({ fl_fehler: v })} /></VCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('fl', 'note_fl')}
 
-        <TestBlock label="Geteilte Aufmerksamkeit" testKey="ga" verKey="ga_ver" col={col} upd={upd}>
-          <SubHeader label="Auditiv" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.ga_rt} onChange={v => upd({ ga_rt: v })} unit="ms" />
-            <PrInput value={col.f.ga_pr} onChange={v => upd({ ga_pr: v })} />
-            <ValInput prefix="s=" value={col.f.ga_sd} onChange={v => upd({ ga_sd: v })} unit="ms" />
-            <PrInput value={col.f.ga_sd_pr} onChange={v => upd({ ga_sd_pr: v })} placeholder="PR-SD" />
-          </TGrid>
-          <SubHeader label="Visuell" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.gv_rt} onChange={v => upd({ gv_rt: v })} unit="ms" />
-            <span />
-            <ValInput prefix="s=" value={col.f.gv_sd} onChange={v => upd({ gv_sd: v })} unit="ms" />
-            <PrInput value={col.f.gv_sd_pr} onChange={v => upd({ gv_sd_pr: v })} placeholder="PR-SD" />
-          </TGrid>
-          <SubHeader label="Fehler · Auslassungen" />
-          <TGrid>
-            <ValInput prefix="F=" value={col.f.g_fehler} onChange={v => upd({ g_fehler: v })} />
-            <span />
-            <ValInput prefix="A♪=" value={col.f.g_ausl_tone} onChange={v => upd({ g_ausl_tone: v })} />
-            <span />
-            <ValInput prefix="A⊞=" value={col.f.g_ausl_quad} onChange={v => upd({ g_ausl_quad: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            {/* ══ GETEILTE AUFMERKSAMKEIT ══ */}
+            <SectionHeader label="Geteilte Aufmerksamkeit" />
 
-        <TestBlock label="Vigilanz" badge="[2.3]" testKey="vig" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.vig_rt} onChange={v => upd({ vig_rt: v })} unit="ms" />
-            <PrInput value={col.f.vig_pr} onChange={v => upd({ vig_pr: v })} />
-            <ValInput prefix="s=" value={col.f.vig_sd} onChange={v => upd({ vig_sd: v })} unit="ms" />
-            <PrInput value={col.f.vig_sd_pr} onChange={v => upd({ vig_sd_pr: v })} placeholder="PR-SD" />
-            <ValInput prefix="F=" value={col.f.vig_fehler} onChange={v => upd({ vig_fehler: v })} />
-            <span />
-            <ValInput prefix="A=" value={col.f.vig_ausl} onChange={v => upd({ vig_ausl: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            <SubRow label="Auditiv" />
+            <DataRow
+              label="Get. Aufmerk."
+              indent
+              flagged={col.f.flag_ga}
+              onFlag={() => upd({ flag_ga: !col.f.flag_ga })}
+              verToggle={<VerToggle value={col.f.ga_ver} onChange={v => upd({ ga_ver: v })} />}
+              noteValue={col.f.note_ga}
+              onNoteChange={v => upd({ note_ga: v })}
+              activeNote={openNotes.has('ga')}
+              onToggleNote={() => toggleNote('ga')}
+            >
+              <VCell><Val value={col.f.ga_rt} onChange={v => upd({ ga_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ga_pr} onChange={v => upd({ ga_pr: v })} /></PCell>
+              <VCell><Val value={col.f.ga_sd} onChange={v => upd({ ga_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ga_sd_pr} onChange={v => upd({ ga_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              {/* Fehler und Auslassungen (aud+vis) stehen in der visuellen Zeile */}
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
 
-        {/* ══════════ GEDÄCHTNIS ══════════ */}
-        <SectionDivider label="Gedächtnis" />
+            <SubRow label="Visuell" />
+            <DataRow
+              label="Get. Aufmerk."
+              indent
+              flagged={col.f.flag_ga}
+            >
+              <VCell><Val value={col.f.gv_rt} onChange={v => upd({ gv_rt: v })} placeholder="ms" /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.gv_sd} onChange={v => upd({ gv_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.gv_sd_pr} onChange={v => upd({ gv_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
 
-        <TestBlock label="Arbeitsgedächtnis" badge="[2.3]" testKey="ag" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.ag_rt} onChange={v => upd({ ag_rt: v })} unit="ms" />
-            <PrInput value={col.f.ag_pr} onChange={v => upd({ ag_pr: v })} />
-            <ValInput prefix="s=" value={col.f.ag_sd} onChange={v => upd({ ag_sd: v })} unit="ms" />
-            <PrInput value={col.f.ag_sd_pr} onChange={v => upd({ ag_sd_pr: v })} placeholder="PR-SD" />
-            <ValInput prefix="F=" value={col.f.ag_fehler} onChange={v => upd({ ag_fehler: v })} />
-            <span />
-            <ValInput prefix="A=" value={col.f.ag_ausl} onChange={v => upd({ ag_ausl: v })} />
-            <span />
-          </TGrid>
-        </TestBlock>
+            <SubRow label="Fehler · Auslassungen" />
+            <DataRow
+              label="Get. Aufmerk."
+              indent
+              flagged={col.f.flag_ga}
+            >
+              <Empty /><Empty /><Empty /><Empty />
+              <VCell><Val value={col.f.g_fehler} onChange={v => upd({ g_fehler: v })} /></VCell>
+              <Empty />
+              {/* Ausl. Ton */}
+              <VCell><Val value={col.f.g_ausl_tone} onChange={v => upd({ g_ausl_tone: v })} placeholder="A♪" /></VCell>
+              <Empty />
+              {/* Ausl. Quadrant in Zusatz */}
+              <VCell><Val value={col.f.g_ausl_quad} onChange={v => upd({ g_ausl_quad: v })} placeholder="A⊞" /></VCell>
+              <Empty />
+            </DataRow>
+            {maybeNote('ga', 'note_ga')}
 
-        {/* ══════════ VISUELLES SCANNING ══════════ */}
-        <SectionDivider label="Visuelles Scanning" />
+            {/* ══ VIGILANZ ══ */}
+            <SectionHeader label="Vigilanz" />
 
-        <TestBlock label="Visuelles Scanning" testKey="ve" verKey="ve_ver" col={col} upd={upd}>
-          <SubHeader label="Kritische Stimuli" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.ve_rt_krit} onChange={v => upd({ ve_rt_krit: v })} unit="ms" />
-            <PrInput value={col.f.ve_pr_krit} onChange={v => upd({ ve_pr_krit: v })} />
-            <ValInput prefix="s=" value={col.f.ve_sd_krit} onChange={v => upd({ ve_sd_krit: v })} unit="ms" />
-            <PrInput value={col.f.ve_sd_pr_krit} onChange={v => upd({ ve_sd_pr_krit: v })} placeholder="PR-SD" />
-          </TGrid>
-          <SubHeader label="Nicht-kritische Stimuli" />
-          <TGrid>
-            <ValInput prefix="M=" value={col.f.ve_rt_nkrit} onChange={v => upd({ ve_rt_nkrit: v })} unit="ms" />
-            <PrInput value={col.f.ve_pr_nkrit} onChange={v => upd({ ve_pr_nkrit: v })} />
-            <ValInput prefix="s=" value={col.f.ve_sd_nkrit} onChange={v => upd({ ve_sd_nkrit: v })} unit="ms" />
-            <PrInput value={col.f.ve_sd_pr_nkrit} onChange={v => upd({ ve_sd_pr_nkrit: v })} placeholder="PR-SD" />
-          </TGrid>
-          <SubHeader label="Fehler · Auslassungen · Zeilen · Spalten" />
-          <TGrid>
-            <ValInput prefix="F=" value={col.f.ve_fehler} onChange={v => upd({ ve_fehler: v })} />
-            <PrInput value={col.f.ve_pr_fehler} onChange={v => upd({ ve_pr_fehler: v })} placeholder="PR-F" />
-            <ValInput prefix="A=" value={col.f.ve_ausl_krit} onChange={v => upd({ ve_ausl_krit: v })} />
-            <PrInput value={col.f.ve_pr_ausl} onChange={v => upd({ ve_pr_ausl: v })} placeholder="PR-A" />
-            <ValInput prefix="Z=" value={col.f.ve_zeilen_r} onChange={v => upd({ ve_zeilen_r: v })} />
-            <PrInput value={col.f.ve_pr_zeilen} onChange={v => upd({ ve_pr_zeilen: v })} placeholder="PR-Z" />
-            <ValInput prefix="S=" value={col.f.ve_spalten_r} onChange={v => upd({ ve_spalten_r: v })} />
-            <PrInput value={col.f.ve_pr_spalten} onChange={v => upd({ ve_pr_spalten: v })} placeholder="PR-S" />
-          </TGrid>
-        </TestBlock>
+            <DataRow
+              label="Vigilanz"
+              badge="2.3"
+              flagged={col.f.flag_vig}
+              onFlag={() => upd({ flag_vig: !col.f.flag_vig })}
+              noteValue={col.f.note_vig}
+              onNoteChange={v => upd({ note_vig: v })}
+              activeNote={openNotes.has('vig')}
+              onToggleNote={() => toggleNote('vig')}
+            >
+              <VCell><Val value={col.f.vig_rt} onChange={v => upd({ vig_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.vig_pr} onChange={v => upd({ vig_pr: v })} /></PCell>
+              <VCell><Val value={col.f.vig_sd} onChange={v => upd({ vig_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.vig_sd_pr} onChange={v => upd({ vig_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <VCell><Val value={col.f.vig_fehler} onChange={v => upd({ vig_fehler: v })} /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.vig_ausl} onChange={v => upd({ vig_ausl: v })} /></VCell>
+              <Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('vig', 'note_vig')}
 
-        {/* ══════════ GESICHTSFELD & NEGLECT ══════════ */}
-        <SectionDivider label="Gesichtsfeld &amp; Neglect" />
+            {/* ══ GEDÄCHTNIS ══ */}
+            <SectionHeader label="Gedächtnis" />
 
-        <TestBlock label="Gesichtsfeld" badge="[2.3]" testKey="gf" eyeKey col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="L=" value={col.f.gf_rt_l} onChange={v => upd({ gf_rt_l: v })} unit="ms" />
-            <PrInput value={col.f.gf_pr} onChange={v => upd({ gf_pr: v })} />
-            <ValInput prefix="R=" value={col.f.gf_rt_r} onChange={v => upd({ gf_rt_r: v })} unit="ms" />
-            <ValInput prefix="A=" value={col.f.gf_ausl} onChange={v => upd({ gf_ausl: v })} />
-          </TGrid>
-          <QuadRow
-            label="RT Quadranten"
-            mq={decodeQuad(col.f.gf_mq)} aq={decodeQuad(col.f.gf_aq)}
-            onMq={q => upd({ gf_mq: encodeQuad(q) })} onAq={q => upd({ gf_aq: encodeQuad(q) })}
-          />
-        </TestBlock>
+            <DataRow
+              label="Arbeitsgedächtnis"
+              badge="2.3"
+              flagged={col.f.flag_ag}
+              onFlag={() => upd({ flag_ag: !col.f.flag_ag })}
+              noteValue={col.f.note_ag}
+              onNoteChange={v => upd({ note_ag: v })}
+              activeNote={openNotes.has('ag')}
+              onToggleNote={() => toggleNote('ag')}
+            >
+              <VCell><Val value={col.f.ag_rt} onChange={v => upd({ ag_rt: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ag_pr} onChange={v => upd({ ag_pr: v })} /></PCell>
+              <VCell><Val value={col.f.ag_sd} onChange={v => upd({ ag_sd: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ag_sd_pr} onChange={v => upd({ ag_sd_pr: v })} placeholder="PR-SD" /></PCell>
+              <VCell><Val value={col.f.ag_fehler} onChange={v => upd({ ag_fehler: v })} /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.ag_ausl} onChange={v => upd({ ag_ausl: v })} /></VCell>
+              <Empty /><Empty /><Empty />
+            </DataRow>
+            {maybeNote('ag', 'note_ag')}
 
-        <TestBlock label="Neglect" badge="[2.3]" testKey="neg" col={col} upd={upd}>
-          <TGrid>
-            <ValInput prefix="L=" value={col.f.neg_rt_l} onChange={v => upd({ neg_rt_l: v })} unit="ms" />
-            <PrInput value={col.f.neg_pr} onChange={v => upd({ neg_pr: v })} />
-            <ValInput prefix="R=" value={col.f.neg_rt_r} onChange={v => upd({ neg_rt_r: v })} unit="ms" />
-            <ValInput prefix="A=" value={col.f.neg_ausl} onChange={v => upd({ neg_ausl: v })} />
-          </TGrid>
-          <QuadRow
-            label="RT Quadranten"
-            mq={decodeQuad(col.f.neg_mq)} aq={decodeQuad(col.f.neg_aq)}
-            onMq={q => upd({ neg_mq: encodeQuad(q) })} onAq={q => upd({ neg_aq: encodeQuad(q) })}
-          />
-        </TestBlock>
+            {/* ══ VISUELLES SCANNING ══ */}
+            <SectionHeader label="Visuelles Scanning" />
 
-      </div>{/* end form card */}
+            <SubRow label="Kritische Stimuli" />
+            <DataRow
+              label="Vis. Scanning"
+              indent
+              flagged={col.f.flag_ve}
+              onFlag={() => upd({ flag_ve: !col.f.flag_ve })}
+              verToggle={<VerToggle value={col.f.ve_ver} onChange={v => upd({ ve_ver: v })} />}
+              noteValue={col.f.note_ve}
+              onNoteChange={v => upd({ note_ve: v })}
+              activeNote={openNotes.has('ve')}
+              onToggleNote={() => toggleNote('ve')}
+            >
+              <VCell><Val value={col.f.ve_rt_krit} onChange={v => upd({ ve_rt_krit: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ve_pr_krit} onChange={v => upd({ ve_pr_krit: v })} /></PCell>
+              <VCell><Val value={col.f.ve_sd_krit} onChange={v => upd({ ve_sd_krit: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ve_sd_pr_krit} onChange={v => upd({ ve_sd_pr_krit: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
+
+            <SubRow label="Nicht-kritische Stimuli" />
+            <DataRow
+              label="Vis. Scanning"
+              indent
+              flagged={col.f.flag_ve}
+            >
+              <VCell><Val value={col.f.ve_rt_nkrit} onChange={v => upd({ ve_rt_nkrit: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ve_pr_nkrit} onChange={v => upd({ ve_pr_nkrit: v })} /></PCell>
+              <VCell><Val value={col.f.ve_sd_nkrit} onChange={v => upd({ ve_sd_nkrit: v })} placeholder="ms" /></VCell>
+              <PCell><PR value={col.f.ve_sd_pr_nkrit} onChange={v => upd({ ve_sd_pr_nkrit: v })} placeholder="PR-SD" /></PCell>
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+            </DataRow>
+
+            <SubRow label="Fehler · Auslassungen · Zeilen · Spalten" />
+            {/* Fehler + Auslassungen */}
+            <DataRow
+              label="Vis. Scanning"
+              indent
+              flagged={col.f.flag_ve}
+            >
+              <Empty /><Empty /><Empty /><Empty />
+              <VCell><Val value={col.f.ve_fehler} onChange={v => upd({ ve_fehler: v })} /></VCell>
+              <PCell><PR value={col.f.ve_pr_fehler} onChange={v => upd({ ve_pr_fehler: v })} placeholder="PR-F" /></PCell>
+              <VCell><Val value={col.f.ve_ausl_krit} onChange={v => upd({ ve_ausl_krit: v })} /></VCell>
+              <PCell><PR value={col.f.ve_pr_ausl} onChange={v => upd({ ve_pr_ausl: v })} placeholder="PR-A" /></PCell>
+              <Empty /><Empty />
+            </DataRow>
+
+            {/* Zeilen */}
+            <DataRow
+              label="Zeilen / Spalten"
+              indent
+              flagged={col.f.flag_ve}
+            >
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+              {/* Zeilen r in Zusatz */}
+              <VCell><Val value={col.f.ve_zeilen_r} onChange={v => upd({ ve_zeilen_r: v })} placeholder="Z" /></VCell>
+              <PCell><PR value={col.f.ve_pr_zeilen} onChange={v => upd({ ve_pr_zeilen: v })} placeholder="PR-Z" /></PCell>
+            </DataRow>
+            {/* Spalten */}
+            <DataRow
+              label="Spalten r"
+              indent
+              flagged={col.f.flag_ve}
+            >
+              <Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty /><Empty />
+              <VCell><Val value={col.f.ve_spalten_r} onChange={v => upd({ ve_spalten_r: v })} placeholder="S" /></VCell>
+              <PCell><PR value={col.f.ve_pr_spalten} onChange={v => upd({ ve_pr_spalten: v })} placeholder="PR-S" /></PCell>
+            </DataRow>
+            {maybeNote('ve', 'note_ve')}
+
+            {/* ══ GESICHTSFELD & NEGLECT ══ */}
+            <SectionHeader label="Gesichtsfeld & Neglect" />
+
+            <DataRow
+              label="Gesichtsfeld"
+              badge="2.3"
+              flagged={col.f.flag_gf}
+              onFlag={() => upd({ flag_gf: !col.f.flag_gf })}
+              eyeToggle={<EyeToggle value={col.f.gf_eye} onChange={v => upd({ gf_eye: v })} />}
+              noteValue={col.f.note_gf}
+              onNoteChange={v => upd({ note_gf: v })}
+              activeNote={openNotes.has('gf')}
+              onToggleNote={() => toggleNote('gf')}
+            >
+              {/* RT L in M/RT, RT R in SD */}
+              <VCell><Val value={col.f.gf_rt_l} onChange={v => upd({ gf_rt_l: v })} placeholder="L ms" /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.gf_rt_r} onChange={v => upd({ gf_rt_r: v })} placeholder="R ms" /></VCell>
+              <Empty />
+              <Empty /><Empty />
+              {/* Auslassungen */}
+              <VCell><Val value={col.f.gf_ausl} onChange={v => upd({ gf_ausl: v })} /></VCell>
+              <Empty />
+              {/* PR gesamt in Zusatz */}
+              <Empty />
+              <PCell><PR value={col.f.gf_pr} onChange={v => upd({ gf_pr: v })} /></PCell>
+            </DataRow>
+            <QuadSection
+              mq={decodeQuad(col.f.gf_mq)} aq={decodeQuad(col.f.gf_aq)}
+              onMq={q => upd({ gf_mq: encodeQuad(q) })} onAq={q => upd({ gf_aq: encodeQuad(q) })}
+            />
+            {maybeNote('gf', 'note_gf')}
+
+            <DataRow
+              label="Neglect"
+              badge="2.3"
+              flagged={col.f.flag_neg}
+              onFlag={() => upd({ flag_neg: !col.f.flag_neg })}
+              noteValue={col.f.note_neg}
+              onNoteChange={v => upd({ note_neg: v })}
+              activeNote={openNotes.has('neg')}
+              onToggleNote={() => toggleNote('neg')}
+            >
+              <VCell><Val value={col.f.neg_rt_l} onChange={v => upd({ neg_rt_l: v })} placeholder="L ms" /></VCell>
+              <Empty />
+              <VCell><Val value={col.f.neg_rt_r} onChange={v => upd({ neg_rt_r: v })} placeholder="R ms" /></VCell>
+              <Empty />
+              <Empty /><Empty />
+              <VCell><Val value={col.f.neg_ausl} onChange={v => upd({ neg_ausl: v })} /></VCell>
+              <Empty />
+              <Empty />
+              <PCell><PR value={col.f.neg_pr} onChange={v => upd({ neg_pr: v })} /></PCell>
+            </DataRow>
+            <QuadSection
+              mq={decodeQuad(col.f.neg_mq)} aq={decodeQuad(col.f.neg_aq)}
+              onMq={q => upd({ neg_mq: encodeQuad(q) })} onAq={q => upd({ neg_aq: encodeQuad(q) })}
+            />
+            {maybeNote('neg', 'note_neg')}
+
+          </tbody>
+        </table>
+      </div>
 
       {/* ── HISTORY ── */}
       {tapResults.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4">
           <button
             onClick={() => setExpandedHistory(v => !v)}
             className="flex items-center gap-2 text-sm font-black text-slate-600 dark:text-slate-300 w-full"
           >
-            <History size={16} className="text-indigo-500" />
+            <History size={15} className="text-indigo-500" />
             Verlauf ({tapResults.length} Messung{tapResults.length !== 1 ? 'en' : ''})
-            {expandedHistory ? <ChevronUp size={14} className="ml-auto" /> : <ChevronDown size={14} className="ml-auto" />}
+            {expandedHistory ? <ChevronUp size={13} className="ml-auto" /> : <ChevronDown size={13} className="ml-auto" />}
           </button>
           {expandedHistory && (
             <div className="mt-3 space-y-2">
-              {tapResults.map((res, idx) => (
-                <div key={res.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/50 text-xs">
-                  {idx === 0 && (
-                    <span className="text-[9px] font-black text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wide">neueste</span>
-                  )}
-                  <span className="font-bold text-slate-700 dark:text-slate-200">{formatDate(res.date)}</span>
-                  {res.examiner && <span className="text-slate-400">{res.examiner}</span>}
-                  <div className="ml-auto flex items-center gap-1">
-                    {confirmDeleteId === res.id ? (
-                      <>
-                        <button
-                          onClick={() => { onDelete(res.id); setConfirmDeleteId(null); }}
-                          className="px-2 py-1 text-[10px] font-black bg-red-100 text-red-600 rounded-lg hover:bg-red-200 flex items-center gap-1"
-                        >
-                          <Check size={11} /> Löschen
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
-                        >
-                          <ChevronDown size={12} />
-                        </button>
-                      </>
-                    ) : (
-                      patient.status !== 'entlassen' && (
-                        <button
-                          onClick={() => setConfirmDeleteId(res.id)}
-                          className="p-1 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50"
-                          title="Löschen"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )
+              {tapResults.map((res, idx) => {
+                const isExpanded = expandedResultId === res.id;
+                const prEntries = TAP_PR_MAP.filter(m => {
+                  const v = String(res.percentileRanks[m.key] ?? '').trim();
+                  return v !== '' && v !== '0';
+                });
+                return (
+                  <div key={res.id} className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 px-3 py-2 bg-slate-50/80 dark:bg-slate-700/40">
+                      {idx === 0 && (
+                        <span className="text-[9px] font-black text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded uppercase tracking-wide">neueste</span>
+                      )}
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatDate(res.date)}</span>
+                      {res.aborted && <AbortBadge comment={res.abortComment} />}
+                      {res.examiner && <span className="text-xs text-slate-400 dark:text-slate-500">{res.examiner}</span>}
+                      <div className="ml-auto flex items-center gap-1">
+                        {prEntries.length > 0 && (
+                          <button
+                            onClick={() => setExpandedResultId(isExpanded ? null : res.id)}
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-black text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                          >
+                            {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            {isExpanded ? 'Einklappen' : 'PR-Werte'}
+                          </button>
+                        )}
+                        {confirmDeleteId === res.id ? (
+                          <>
+                            <button
+                              onClick={() => { onDelete(res.id); setConfirmDeleteId(null); }}
+                              className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                              title="Löschen bestätigen"
+                            ><Check size={12} /></button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                            ><ChevronDown size={12} /></button>
+                          </>
+                        ) : (
+                          patient.status !== 'entlassen' && (
+                            <button
+                              onClick={() => setConfirmDeleteId(res.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors"
+                              title="Löschen"
+                            ><Trash2 size={12} /></button>
+                          )
+                        )}
+                      </div>
+                    </div>
+                    {isExpanded && prEntries.length > 0 && (
+                      <div className="p-3 bg-white dark:bg-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                        {prEntries.map(m => (
+                          <div key={m.key} className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-400 dark:text-slate-500 italic truncate flex-1">{m.label}:</span>
+                            <span className="font-black text-indigo-600 dark:text-indigo-400 tabular-nums shrink-0">
+                              PR {res.percentileRanks[m.key]}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

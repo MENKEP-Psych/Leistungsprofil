@@ -57,9 +57,11 @@ const PR_KEY_MAP: Record<string, string[] | undefined> = {
   zzt:         ['zzt'],
   wms_vw:      ['sofortiger_abruf', 'verzoegerter_abruf', 'wiedererkennen'],
   zahlenspanne:['vorwaerts', 'rueckwaerts'],
+  blockspanne: ['vorwaerts', 'rueckwaerts'],
   lg:          ['lgI', 'lgII'],
   mosaik:      ['mosaik'],
   rey:         ['cft', 'cfm', 'cqm'],
+  lps:         ['s1_2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12', 's13', 's14'],
   tol:         ['alterkorrigiert', 'alter_bildung'],
 };
 

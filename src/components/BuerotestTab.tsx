@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { FileText } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import {
-  TestMeta, NoteField, FormSave,
+  TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
@@ -30,6 +31,8 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const bueroResults = previousResults
     .filter(r => r.testId === 'buerotest')
@@ -40,6 +43,7 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setEditingId(null);
+    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -50,6 +54,8 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
     setAufgabe6variant((res.rawValues.aufgabe6variant as 'A' | 'B') ?? 'A');
     setAufgabe6(String(res.rawValues.aufgabe6 ?? ''));
     setNote(res.note ?? '');
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const handleSave = () => {
@@ -63,12 +69,16 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
       normInfo: 'Bürotest – Qualitative Auswertung',
       examiner,
       note,
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true);
     setTimeout(() => setLastSaved(false), 3000);
     resetForm();
   };
+
+  useShortcutSave(handleSave);
 
   const textareaCls = 'w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none';
 
@@ -127,6 +137,7 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
           </div>
 
           <NoteField value={note} onChange={setNote} />
+          <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
           <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={resetForm} />
         </div>
 
@@ -149,9 +160,10 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
                   )}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{formatDate(res.date)}</span>
-                      {res.examiner && <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-2">· {res.examiner}</span>}
+                      {res.aborted && <AbortBadge comment={res.abortComment} />}
+                      {res.examiner && <span className="text-[10px] text-slate-400 dark:text-slate-500">· {res.examiner}</span>}
                     </div>
                     <HistoryRowActions
                       id={res.id}

@@ -20,7 +20,11 @@ import {
   Download,
   Server,
   Save,
+  FolderOpen,
+  FlaskConical,
+  ShieldCheck,
 } from 'lucide-react';
+import { NormenVerifizierenTab } from './NormenVerifizierenTab';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -31,10 +35,13 @@ import {
   dbCreateUser,
   dbDeleteUser,
   dbChangePassword,
+  dbChangeRole,
   dbGetRecoveryKey,
   dbLogin,
   dbSyncGetServerPath,
   dbSyncSetServerPath,
+  dbGetPdfFolder,
+  dbSetPdfFolder,
   isElectron,
 } from '../lib/db-api';
 import type { UserRow } from '../lib/ipc-types';
@@ -240,6 +247,8 @@ export const AdminTab: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const isAdmin = currentUserRole === 'admin';
 
+  const [subTab, setSubTab] = useState<'einstellungen' | 'normen'>('einstellungen');
+
   // Password modal
   const [changePwFor, setChangePwFor] = useState<{ username: string; isOwn: boolean } | null>(null);
 
@@ -252,6 +261,7 @@ export const AdminTab: React.FC = () => {
   const [createError, setCreateError] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [roleError, setRoleError] = useState('');
 
   // Recovery key
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null); // null = loading
@@ -266,6 +276,12 @@ export const AdminTab: React.FC = () => {
   const [serverPathUnlocked, setServerPathUnlocked] = useState(false);
   const [serverPathPw, setServerPathPw] = useState('');
   const [serverPathPwError, setServerPathPwError] = useState('');
+
+  // PDF export folder
+  const [pdfFolder, setPdfFolder] = useState('');
+  const [pdfFolderSaving, setPdfFolderSaving] = useState(false);
+  const [pdfFolderSaved, setPdfFolderSaved] = useState(false);
+  const [pdfFolderError, setPdfFolderError] = useState('');
 
   // Audit log
   const [auditOpen, setAuditOpen] = useState(false);
@@ -297,7 +313,14 @@ export const AdminTab: React.FC = () => {
     setServerPath(p);
   };
 
+  const loadPdfFolder = async () => {
+    if (!isElectron()) return;
+    const p = await dbGetPdfFolder();
+    setPdfFolder(p);
+  };
+
   useEffect(() => {
+    loadPdfFolder();
     if (isAdmin) {
       loadUsers();
       loadRecoveryKey();
@@ -329,6 +352,21 @@ export const AdminTab: React.FC = () => {
       setTimeout(() => setServerPathSaved(false), 3000);
     } else {
       setServerPathError(res.error ?? 'Fehler beim Speichern');
+    }
+  };
+
+  const handleSavePdfFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPdfFolderError('');
+    setPdfFolderSaved(false);
+    setPdfFolderSaving(true);
+    const res = await dbSetPdfFolder(pdfFolder.trim());
+    setPdfFolderSaving(false);
+    if (res.success) {
+      setPdfFolderSaved(true);
+      setTimeout(() => setPdfFolderSaved(false), 3000);
+    } else {
+      setPdfFolderError(res.error ?? 'Fehler beim Speichern');
     }
   };
 
@@ -364,6 +402,16 @@ export const AdminTab: React.FC = () => {
     else { setDeleteError(res.error ?? 'Löschen fehlgeschlagen'); }
   };
 
+  const handleChangeRole = async (username: string, currentRole: string) => {
+    setRoleError('');
+    const newRole: 'admin' | 'user' = currentRole === 'admin' ? 'user' : 'admin';
+    const label = newRole === 'admin' ? 'Administrator' : 'Benutzer';
+    if (!confirm(`Rolle von »${username}« zu »${label}« ändern?`)) return;
+    const res = await dbChangeRole(username, newRole);
+    if (res.success) { await loadUsers(); }
+    else { setRoleError(res.error ?? 'Rollenwechsel fehlgeschlagen'); }
+  };
+
   const handleCopyRecovery = () => {
     if (!recoveryKey) return;
     navigator.clipboard.writeText(recoveryKey).then(() => {
@@ -375,7 +423,46 @@ export const AdminTab: React.FC = () => {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-10">
+    <div className="pb-10">
+      {/* ── Sub-tab switcher ── */}
+      <div className="max-w-2xl mx-auto px-1 mb-6">
+        <div className="inline-flex rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 gap-1">
+          <button
+            onClick={() => setSubTab('einstellungen')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+              subTab === 'einstellungen'
+                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200',
+            )}
+          >
+            <Users size={13} />
+            Einstellungen
+          </button>
+          <button
+            onClick={() => setSubTab('normen')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+              subTab === 'normen'
+                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200',
+            )}
+          >
+            <FlaskConical size={13} />
+            Normen verifizieren
+          </button>
+        </div>
+      </div>
+
+      {/* ── Normen verifizieren ── */}
+      {subTab === 'normen' && (
+        <div className="max-w-5xl mx-auto px-1">
+          <NormenVerifizierenTab />
+        </div>
+      )}
+
+      {/* ── Einstellungen (original content) ── */}
+      {subTab === 'einstellungen' && <div className="max-w-2xl mx-auto space-y-5">
       {changePwFor && (
         <ChangePwModal
           targetUsername={changePwFor.username}
@@ -431,6 +518,50 @@ export const AdminTab: React.FC = () => {
           </button>
         </div>
       </Section>
+
+      {/* ── PDF-Exportordner (alle Benutzer, nur Electron) ── */}
+      {isElectron() && (
+        <Section>
+          <SectionHeader label="PDF-Exportordner" />
+          <div className="px-6 pb-6 space-y-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Standard-Startordner für den Speichern-Dialog beim PDF-Export. Wird lokal auf diesem PC gespeichert.
+            </p>
+            <form onSubmit={handleSavePdfFolder} className="flex gap-3">
+              <div className="flex-1 relative">
+                <FolderOpen size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={pdfFolder}
+                  onChange={e => { setPdfFolder(e.target.value); setPdfFolderSaved(false); }}
+                  placeholder="z.B. G:\Leistungsprofil\PDFs"
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-mono font-semibold text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pdfFolderSaving}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all disabled:opacity-60 shrink-0"
+              >
+                {pdfFolderSaving
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : pdfFolderSaved
+                    ? <CheckCircle size={14} />
+                    : <Save size={14} />}
+                {pdfFolderSaved ? 'Gespeichert' : 'Speichern'}
+              </button>
+            </form>
+            {pdfFolderError && (
+              <p className="text-xs text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-4 py-2.5 rounded-xl">{pdfFolderError}</p>
+            )}
+            {pdfFolderSaved && (
+              <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                Gespeichert. Gilt nur für diesen PC.
+              </p>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* ── Admin‑only sections ── */}
       {isAdmin && (
@@ -511,6 +642,15 @@ export const AdminTab: React.FC = () => {
                         )}
                         {u.username !== 'recovery' && u.username !== currentUser && (
                           <button
+                            onClick={() => handleChangeRole(u.username, u.role)}
+                            title={u.role === 'admin' ? 'Zu Benutzer herabstufen' : 'Zu Administrator hochstufen'}
+                            className="p-2 rounded-xl text-slate-300 dark:text-slate-600 hover:text-amber-500 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-900/30 transition-all"
+                          >
+                            <ShieldCheck size={14} />
+                          </button>
+                        )}
+                        {u.username !== 'recovery' && u.username !== currentUser && (
+                          <button
                             onClick={() => handleDeleteUser(u.username)}
                             title="Benutzer löschen"
                             className="p-2 rounded-xl text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 transition-all"
@@ -526,6 +666,9 @@ export const AdminTab: React.FC = () => {
 
               {deleteError && (
                 <p className="mt-3 text-xs text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-4 py-2.5 rounded-xl">{deleteError}</p>
+              )}
+              {roleError && (
+                <p className="mt-3 text-xs text-red-500 font-semibold bg-red-50 dark:bg-red-950/30 px-4 py-2.5 rounded-xl">{roleError}</p>
               )}
             </div>
 
@@ -794,6 +937,14 @@ export const AdminTab: React.FC = () => {
           </Section>
         </>
       )}
+
+      {/* Copyright */}
+      <div className="pt-2 pb-6 px-1 text-center">
+        <p className="text-[10px] text-slate-300 dark:text-slate-600 font-medium">
+          © Paul Menke · Alle Rechte vorbehalten · Dieses Programm darf ohne ausdrückliche Genehmigung nicht vervielfältigt, weitergegeben oder anderweitig genutzt werden.
+        </p>
+      </div>
+      </div>}
     </div>
   );
 };

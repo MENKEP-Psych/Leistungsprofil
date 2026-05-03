@@ -1,11 +1,12 @@
 import React from 'react';
 import { Patient, TestResult, PRResult } from '../types';
 import { PRProfile, TextProfileResult } from './PRProfile';
-import { Download, Layers, Eye, Calendar, User, DoorOpen, GraduationCap, StickyNote, Minus, TrendingUp, TrendingDown } from 'lucide-react';
+import { Download, Layers, Eye, StickyNote, Minus, TrendingUp, TrendingDown } from 'lucide-react';
 import { exportProfilePDF } from '../lib/exportPDF';
 import { formatDate } from '../lib/utils';
 import { FieldSection, decodeQuad } from './NeglectShared';
 import { TAP_PR_MAP, TAP_SD_PR_MAP, TAP_VE_PR_MAP } from './TAPTab';
+import { LPS_SUBTESTS, LPS_KORREKTUR_OPTIONS } from './LPSTab';
 
 // ── Neglect/GF section config ─────────────────────────────────────────────────
 
@@ -49,6 +50,27 @@ const VLMT_MEASURES: VLMTMeasure[] = [
   { key: 'W_F',      label: 'Korr. Wiedererkennen [WR–FP]',   domain: '2. Gedächtnis (Wiedererkennen)', getDetail: r => `W_F: ${r.rawValues.W_F ?? '–'}` },
 ];
 
+// Combines notes from the latest and previous test sessions.
+// If both have notes, the previous one is prefixed with its date.
+const combineNotes = (latest: TestResult, previous?: TestResult): string | undefined => {
+  const a = latest.note?.trim() || '';
+  const b = previous?.note?.trim() || '';
+  if (!a && !b) return undefined;
+  if (!b) return a || undefined;
+  if (!a) return `[${formatDate(previous!.date)}] ${b}`;
+  if (a === b) return a;
+  return `${a}\n[${formatDate(previous!.date)}] ${b}`;
+};
+
+// Like combineNotes but appends TMT error counts for the given part (A or B).
+const combineTmtNotes = (latest: TestResult, previous: TestResult | undefined, part: 'A' | 'B'): string | undefined => {
+  const base = combineNotes(latest, previous) ?? '';
+  const err = latest.rawValues[`err${part}`];
+  const suffix = err != null ? ` – Fehler ${part}: ${err}` : '';
+  const result = (base + suffix).trim();
+  return result || undefined;
+};
+
 export const ProfileTab: React.FC<ProfileTabProps> = ({
   patient,
   results,
@@ -56,6 +78,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 }) => {
   const profileData: PRResult[] = (() => {
     const data: PRResult[] = [];
+
+    const abt  = (r: TestResult)  => r.aborted  ? { aborted:     true as const, abortComment:     r.abortComment  } : {};
+    const pabt = (r?: TestResult) => r?.aborted ? { prevAborted: true as const, prevAbortComment: r.abortComment  } : {};
 
     // ── TMT ──────────────────────────────────────────────────────────────────
     const tmtResults = results
@@ -68,7 +93,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       data.push(
         {
           label: 'TMT Teil A (Suchen)',
-          currentPr: latest.percentileRanks.A,
+          currentPr: latest.percentileRanks.A ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.A,
           date: latest.date,
           prevDate: previous?.date,
@@ -77,11 +102,13 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Trail Making Test',
           details: [`Zeit: ${latest.rawValues.A}s`],
           previousDetails: previous ? [`Zeit: ${previous.rawValues.A}s`] : undefined,
-          note: latest.note,
+          note: combineTmtNotes(latest, previous, 'A'),
+          ...abt(latest),
+          ...pabt(previous),
         },
         {
           label: 'TMT Teil B (Wechseln)',
-          currentPr: latest.percentileRanks.B,
+          currentPr: latest.percentileRanks.B ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.B,
           date: latest.date,
           prevDate: previous?.date,
@@ -90,7 +117,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Trail Making Test',
           details: [`Zeit: ${latest.rawValues.B}s`],
           previousDetails: previous ? [`Zeit: ${previous.rawValues.B}s`] : undefined,
-          note: latest.note,
+          note: combineTmtNotes(latest, previous, 'B'),
+          ...abt(latest),
+          ...pabt(previous),
         }
       );
     }
@@ -106,10 +135,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
       for (const m of VLMT_MEASURES) {
         const currPr = latest.percentileRanks[m.key];
-        if (currPr === undefined || currPr === 'n/a') continue;
+        if ((currPr === undefined || currPr === 'n/a') && !latest.aborted) continue;
         data.push({
           label: m.label,
-          currentPr: currPr,
+          currentPr: currPr ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks[m.key] !== 'n/a'
             ? previous?.percentileRanks[m.key]
             : undefined,
@@ -120,6 +149,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'VLMT',
           details: [m.getDetail(latest)],
           previousDetails: previous ? [m.getDetail(previous)] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -136,7 +167,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
       data.push({
         label: 'TOL (Alterskorrigiert)',
-        currentPr: latest.percentileRanks.alterkorrigiert,
+        currentPr: latest.percentileRanks.alterkorrigiert ?? (latest.aborted ? 'n/a' : undefined),
         previousPr: previous?.percentileRanks.alterkorrigiert,
         date: latest.date,
         prevDate: previous?.date,
@@ -145,6 +176,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         details: [detailStr(latest)],
         previousDetails: previous ? [detailStr(previous)] : undefined,
         note: latest.note,
+        ...abt(latest),
+        ...pabt(previous),
       });
 
       if (latest.percentileRanks.alter_bildung !== undefined) {
@@ -158,6 +191,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Turm von London',
           details: [detailStr(latest)],
           previousDetails: previous ? [detailStr(previous)] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -227,6 +262,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           subdomain: TAP_SUBDOMAIN[m.key],
           testGroup: 'TAP',
           tapVersion,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -254,6 +291,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'TAP – Vis. Scanning',
           tapVersion: veIsTapM ? 'M' : '2.3',
           details: rawVal ? [`Wert: ${rawVal}${m.unit ? ' ' + m.unit : ''}`] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -289,6 +328,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           subdomain: TAP_SD_SUBDOMAIN[m.key],
           testGroup: 'TAP – Standardabweichungen',
           details: rawVal ? [`SD: ${rawVal} ${m.unit}`] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -302,10 +343,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       const latest   = wmsResults[0];
       const previous = wmsResults[1];
 
-      if (latest.percentileRanks.sofortiger_abruf !== undefined) {
+      if (latest.percentileRanks.sofortiger_abruf !== undefined || latest.aborted) {
         data.push({
           label: 'Sofortiger Abruf',
-          currentPr: latest.percentileRanks.sofortiger_abruf,
+          currentPr: latest.percentileRanks.sofortiger_abruf ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.sofortiger_abruf,
           date: latest.date,
           prevDate: previous?.date,
@@ -316,14 +357,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           previousDetails: previous?.rawValues.sofortig !== undefined
             ? [`RW: ${previous.rawValues.sofortig}, WP: ${previous.calculatedValues.sofortig_wp ?? '–'}`]
             : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
 
-      if (latest.percentileRanks.verzoegerter_abruf !== undefined) {
+      if (latest.percentileRanks.verzoegerter_abruf !== undefined || latest.aborted) {
         data.push({
           label: 'Verzögerter Abruf',
-          currentPr: latest.percentileRanks.verzoegerter_abruf,
+          currentPr: latest.percentileRanks.verzoegerter_abruf ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.verzoegerter_abruf,
           date: latest.date,
           prevDate: previous?.date,
@@ -334,13 +377,15 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           previousDetails: previous?.rawValues.verzoegert !== undefined
             ? [`RW: ${previous.rawValues.verzoegert}, WP: ${previous.calculatedValues.verzoegert_wp ?? '–'}`]
             : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
 
-      if (latest.percentileRanks.wiedererkennen !== undefined) {
+      if (latest.percentileRanks.wiedererkennen !== undefined || latest.aborted) {
         data.push({
           label: 'Wiedererkennen',
-          currentPr: latest.percentileRanks.wiedererkennen,
+          currentPr: latest.percentileRanks.wiedererkennen ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.wiedererkennen,
           date: latest.date,
           prevDate: previous?.date,
@@ -351,6 +396,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           previousDetails: previous?.rawValues.wiedererkennen !== undefined
             ? [`RW: ${previous.rawValues.wiedererkennen}`]
             : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -370,10 +417,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       ] as const;
       for (const s of ROCFT_SCALES) {
         const currPr = latest.percentileRanks[s.key];
-        if (currPr === undefined || currPr === 'n/a') continue;
+        if ((currPr === undefined || currPr === 'n/a') && !latest.aborted) continue;
         data.push({
           label: s.label,
-          currentPr: currPr,
+          currentPr: currPr ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks[s.key] !== 'n/a' ? previous?.percentileRanks[s.key] : undefined,
           date: latest.date,
           prevDate: previous?.date,
@@ -381,7 +428,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Rey-Osterrieth-Figur (ROCFT)',
           details: [`RW: ${latest.rawValues[s.rawKey] ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues[s.rawKey] ?? '–'}`] : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -394,17 +443,19 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     if (zztResults.length > 0) {
       const latest   = zztResults[0];
       const previous = zztResults[1];
-      if (latest.percentileRanks.zzt !== undefined) {
+      if (latest.percentileRanks.zzt !== undefined || latest.aborted) {
         data.push({
           label: 'ZZT (Median)',
-          currentPr: latest.percentileRanks.zzt,
+          currentPr: latest.percentileRanks.zzt ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.zzt,
           date: latest.date,
           prevDate: previous?.date,
           domain: '1. Aufmerksamkeit',
           subdomain: '1.1 Informationsverarbeitungsgeschwindigkeit',
           testGroup: 'Zahlen-Zeichen-Test',
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -418,10 +469,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       const latest   = zahlenspanneResults[0];
       const previous = zahlenspanneResults[1];
 
-      if (latest.percentileRanks.vorwaerts !== undefined) {
+      if (latest.percentileRanks.vorwaerts !== undefined || latest.aborted) {
         data.push({
           label: 'Zahlenspanne vorwärts',
-          currentPr: latest.percentileRanks.vorwaerts,
+          currentPr: latest.percentileRanks.vorwaerts ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.vorwaerts,
           date: latest.date,
           prevDate: previous?.date,
@@ -430,14 +481,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Zahlenspanne',
           details: [`RW: ${latest.rawValues.vorwaerts ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues.vorwaerts ?? '–'}`] : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
 
-      if (latest.percentileRanks.rueckwaerts !== undefined) {
+      if (latest.percentileRanks.rueckwaerts !== undefined || latest.aborted) {
         data.push({
           label: 'Zahlenspanne rückwärts',
-          currentPr: latest.percentileRanks.rueckwaerts,
+          currentPr: latest.percentileRanks.rueckwaerts ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.rueckwaerts,
           date: latest.date,
           prevDate: previous?.date,
@@ -446,6 +499,53 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Zahlenspanne',
           details: [`RW: ${latest.rawValues.rueckwaerts ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues.rueckwaerts ?? '–'}`] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
+        });
+      }
+    }
+
+    // ── Blockspanne ──────────────────────────────────────────────────────────
+    const blockspanneResults = results
+      .filter(r => r.testId === 'blockspanne')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (blockspanneResults.length > 0) {
+      const latest   = blockspanneResults[0];
+      const previous = blockspanneResults[1];
+
+      if (latest.percentileRanks.vorwaerts !== undefined || latest.aborted) {
+        data.push({
+          label: 'Blockspanne vorwärts',
+          currentPr: latest.percentileRanks.vorwaerts ?? (latest.aborted ? 'n/a' : undefined),
+          previousPr: previous?.percentileRanks.vorwaerts,
+          date: latest.date,
+          prevDate: previous?.date,
+          domain: '2. Gedächtnis (Kurzzeitgedächtnis)',
+          subdomain: '2.1 Merkspanne',
+          testGroup: 'Blockspanne',
+          details: [`RW: ${latest.rawValues.vorwaerts ?? '–'}`],
+          previousDetails: previous ? [`RW: ${previous.rawValues.vorwaerts ?? '–'}`] : undefined,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
+        });
+      }
+
+      if (latest.percentileRanks.rueckwaerts !== undefined || latest.aborted) {
+        data.push({
+          label: 'Blockspanne rückwärts',
+          currentPr: latest.percentileRanks.rueckwaerts ?? (latest.aborted ? 'n/a' : undefined),
+          previousPr: previous?.percentileRanks.rueckwaerts,
+          date: latest.date,
+          prevDate: previous?.date,
+          domain: '2. Gedächtnis (Arbeitsgedächtnis)',
+          subdomain: '2.2 Arbeitsgedächtnis',
+          testGroup: 'Blockspanne',
+          details: [`RW: ${latest.rawValues.rueckwaerts ?? '–'}`],
+          previousDetails: previous ? [`RW: ${previous.rawValues.rueckwaerts ?? '–'}`] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -459,10 +559,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       const latest   = lgResults[0];
       const previous = lgResults[1];
 
-      if (latest.percentileRanks.lgI !== undefined) {
+      if (latest.percentileRanks.lgI !== undefined || latest.aborted) {
         data.push({
           label: 'Log. Gedächtnis I (Sofort)',
-          currentPr: latest.percentileRanks.lgI,
+          currentPr: latest.percentileRanks.lgI ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.lgI,
           date: latest.date,
           prevDate: previous?.date,
@@ -471,14 +571,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Logisches Gedächtnis',
           details: [`RW: ${latest.rawValues.lgI ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues.lgI ?? '–'}`] : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
 
-      if (latest.percentileRanks.lgII !== undefined) {
+      if (latest.percentileRanks.lgII !== undefined || latest.aborted) {
         data.push({
           label: 'Log. Gedächtnis II (Verzögert)',
-          currentPr: latest.percentileRanks.lgII,
+          currentPr: latest.percentileRanks.lgII ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.lgII,
           date: latest.date,
           prevDate: previous?.date,
@@ -487,6 +589,26 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Logisches Gedächtnis',
           details: [`RW: ${latest.rawValues.lgII ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues.lgII ?? '–'}`] : undefined,
+          ...abt(latest),
+          ...pabt(previous),
+        });
+      }
+
+      if (latest.percentileRanks.wiedererk !== undefined || latest.aborted) {
+        data.push({
+          label: 'Log. Gedächtnis Wiedererkennen',
+          currentPr: latest.percentileRanks.wiedererk ?? (latest.aborted ? 'n/a' : undefined),
+          previousPr: previous?.percentileRanks.wiedererk,
+          date: latest.date,
+          prevDate: previous?.date,
+          domain: '2. Gedächtnis (Wiedererkennen)',
+          subdomain: '2.3 Verbale Lern- und Merkfähigkeit',
+          testGroup: 'Logisches Gedächtnis',
+          details: [`RW: ${latest.rawValues.wiedererk ?? '–'}`],
+          previousDetails: previous ? [`RW: ${previous.rawValues.wiedererk ?? '–'}`] : undefined,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
         });
       }
     }
@@ -499,10 +621,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     if (mosaikResults.length > 0) {
       const latest   = mosaikResults[0];
       const previous = mosaikResults[1];
-      if (latest.percentileRanks.mosaik !== undefined) {
+      if (latest.percentileRanks.mosaik !== undefined || latest.aborted) {
         data.push({
           label: 'Mosaik-Test',
-          currentPr: latest.percentileRanks.mosaik,
+          currentPr: latest.percentileRanks.mosaik ?? (latest.aborted ? 'n/a' : undefined),
           previousPr: previous?.percentileRanks.mosaik,
           date: latest.date,
           prevDate: previous?.date,
@@ -510,7 +632,56 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           testGroup: 'Mosaik-Test',
           details: [`RW: ${latest.rawValues.rohwert ?? '–'}`],
           previousDetails: previous ? [`RW: ${previous.rawValues.rohwert ?? '–'}`] : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
+          ...abt(latest),
+          ...pabt(previous),
+        });
+      }
+    }
+
+    // ── LPS – Leistungsprüfsystem ─────────────────────────────────────────────
+    // Each subtest is evaluated independently across all LPS sessions so that
+    // subtests entered in different sessions all appear in the profile.
+    const lpsResults = results
+      .filter(r => r.testId === 'lps')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (lpsResults.length > 0) {
+      for (const s of LPS_SUBTESTS) {
+        // All sessions that recorded a PR value for this subtest, newest first
+        const withData = lpsResults.filter(r => r.percentileRanks[s.id] !== undefined);
+        if (withData.length === 0) continue;
+
+        const latest   = withData[0];
+        const previous = withData[1];
+
+        const korrekturLabel = LPS_KORREKTUR_OPTIONS.find(
+          o => o.value === latest.rawValues.korrektur
+        )?.label ?? 'Unkorrigiert';
+
+        const rw  = latest.rawValues[`${s.id}_rw`];
+        const tw  = latest.rawValues[`${s.id}_tw`];
+        const prw = previous?.rawValues[`${s.id}_rw`];
+        const ptw = previous?.rawValues[`${s.id}_tw`];
+
+        data.push({
+          label: s.label,
+          currentPr: latest.percentileRanks[s.id],
+          previousPr: previous?.percentileRanks[s.id],
+          date: latest.date,
+          prevDate: previous?.date,
+          domain: '4. Intellektuelle Leistungen',
+          testGroup: 'LPS',
+          lpsKorrektur: korrekturLabel,
+          details: [
+            [rw !== undefined ? `RW: ${rw}` : null, tw !== undefined ? `T: ${tw}` : null]
+              .filter(Boolean).join('  ') || undefined,
+          ].filter(Boolean) as string[],
+          previousDetails: previous ? [
+            [prw !== undefined ? `RW: ${prw}` : null, ptw !== undefined ? `T: ${ptw}` : null]
+              .filter(Boolean).join('  ') || undefined,
+          ].filter(Boolean) as string[] : undefined,
+          note: combineNotes(latest, previous),
         });
       }
     }
@@ -567,7 +738,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             testGroup: name,
             details: row.value ? [`Wert: ${row.value}`] : undefined,
             previousDetails: prevRow?.value ? [`Wert: ${prevRow.value}`] : undefined,
-            note: latest.note,
+            note: combineNotes(latest, previous),
+            ...abt(latest),
+            ...pabt(previous),
           });
         });
       }
@@ -602,7 +775,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         text: String(bueroLatest.rawValues.aufgabe6),
       });
     if (items.length > 0)
-      textResults.push({ domain: '5. Exekutive Funktionen', testGroup: 'Bürotest', items, date: bueroLatest.date, examiner: bueroLatest.examiner, note: bueroLatest.note });
+      textResults.push({ domain: '5. Exekutive Funktionen', testGroup: 'Bürotest', items, date: bueroLatest.date, examiner: bueroLatest.examiner, note: combineNotes(bueroLatest) });
   }
 
   const tagesplanLatest = results
@@ -615,12 +788,12 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       items: [{ label: 'Tagesplan', text: String(tagesplanLatest.rawValues.planText) }],
       date: tagesplanLatest.date,
       examiner: tagesplanLatest.examiner,
-      note: tagesplanLatest.note,
+      note: combineNotes(tagesplanLatest),
     });
   }
 
-  const handleExportPDF = () => {
-    exportProfilePDF(patient, profileData, results, generalNote);
+  const handleExportPDF = async () => {
+    await exportProfilePDF(patient, profileData, results, generalNote);
   };
 
   // ── Summary data ────────────────────────────────────────────────────────────
@@ -669,44 +842,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             <Download size={16} /> PDF Export
           </button>
         </div>
-      </div>
-
-      {/* ── Patientendaten Info-Bar ── */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-          <Calendar size={13} className="text-indigo-400 shrink-0" />
-          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1">Geb.</span>
-          {formatDate(patient.geburtsdatum)}
-          <span className="ml-1 text-slate-400 dark:text-slate-500">({patient.age} J.)</span>
-        </div>
-        {patient.neuropsychologin && (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <User size={13} className="text-indigo-400 shrink-0" />
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1">Zuständig</span>
-            {patient.neuropsychologin}
-          </div>
-        )}
-        {patient.bildungsjahre !== undefined && (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <GraduationCap size={13} className="text-indigo-400 shrink-0" />
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1">Bildung</span>
-            {patient.bildungsjahre} J.
-          </div>
-        )}
-        {patient.aufnahmedatum && (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <DoorOpen size={13} className="text-emerald-500 shrink-0" />
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1">Aufnahme</span>
-            {formatDate(patient.aufnahmedatum)}
-          </div>
-        )}
-        {patient.entlassdatum && (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <DoorOpen size={13} className="text-rose-400 shrink-0" />
-            <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1">Entlassung</span>
-            {formatDate(patient.entlassdatum)}
-          </div>
-        )}
       </div>
 
       {/* ── Allgemeine Notiz (wenn vorhanden) ── */}

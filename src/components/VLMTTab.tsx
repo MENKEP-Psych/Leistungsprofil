@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { Brain, AlertCircle } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { calculateVLMTPR } from '../lib/vlmt';
+import { calculateVLMTPR, calculateVLMTPRPartial } from '../lib/vlmt';
 import {
-  prColorCls, PrBadge, TestMeta, NoteField, FormSave,
+  prColorCls, PrBadge, TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
@@ -30,7 +31,7 @@ const MEASURES = [
   { key: 'Dg7',      label: 'Verzögerter Abruf [7]',         rawLabel: 'Dg7'  },
   { key: 'Dg5_Dg7',  label: 'Verlust n. Verzögerung [Δ5–7]', rawLabel: 'Δ5–7' },
   { key: 'W',        label: 'Richtig [WR]',                  rawLabel: 'W'    },
-  { key: 'W_F',      label: 'Korr. Wiedererkennen [WR–FP]',  rawLabel: 'W_F'  },
+  { key: 'W_F',      label: 'Korr. Wiedererkennen [WR–FP-B–FP]', rawLabel: 'W_F' },
 ] as const;
 
 // Eingabereihenfolge: Dg1-5 | I | Dg6 Dg7 | W FP_B FP
@@ -50,6 +51,8 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const vlmtResults = previousResults
     .filter(r => r.testId === 'vlmt')
@@ -69,8 +72,11 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
   const dg7 = num('Dg7'); const iVal = num('I');   const wVal = num('W');
   const fpBVal = num('FP_B'); const fpVal = num('FP');
 
-  // W_F (Korrigiertes Wiedererkennen) wird auto-berechnet aus W - FP
-  const wfVal: number | null = wVal !== null && fpVal !== null ? wVal - fpVal : null;
+  // W_F (Korrigiertes Wiedererkennen) wird auto-berechnet aus W - FP_B - FP
+  const wfVal: number | null =
+    wVal !== null && (fpBVal !== null || fpVal !== null)
+      ? wVal - (fpBVal ?? 0) - (fpVal ?? 0)
+      : null;
 
   const sumDg1_5 =
     dg1 !== null && dg2 !== null && dg3 !== null && dg4 !== null && dg5 !== null
@@ -83,6 +89,16 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     dg5 !== null && dg6 !== null && dg7 !== null &&
     iVal !== null && wVal !== null;
 
+  const anyValue = [dg1,dg2,dg3,dg4,dg5,dg6,dg7,iVal,wVal].some(v => v !== null);
+
+  const partialResult = anyValue
+    ? calculateVLMTPRPartial(ageAtTest, {
+        Dg1: dg1, Dg2: dg2, Dg3: dg3, Dg4: dg4, Dg5: dg5,
+        Dg6: dg6, Dg7: dg7, I: iVal, W: wVal, W_F: wfVal,
+      })
+    : null;
+
+  // Keep full-result alias for norm info and save logic
   const liveResult = allRequired
     ? calculateVLMTPR(ageAtTest, {
         Dg1: dg1!, Dg2: dg2!, Dg3: dg3!, Dg4: dg4!, Dg5: dg5!,
@@ -117,6 +133,8 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
     setErrors({});
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
     setInputs({
       Dg1: String(res.rawValues.Dg1 ?? ''), Dg2: String(res.rawValues.Dg2 ?? ''),
       Dg3: String(res.rawValues.Dg3 ?? ''), Dg4: String(res.rawValues.Dg4 ?? ''),
@@ -135,20 +153,40 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setErrors({});
+    setAborted(false); setAbortComment('');
   };
 
   const handleSave = () => {
-    if (!validate() || !allRequired) return;
+    if (!aborted && (!validate() || !allRequired)) return;
 
-    const prResult = calculateVLMTPR(ageAtTest, {
-      Dg1: dg1!, Dg2: dg2!, Dg3: dg3!, Dg4: dg4!, Dg5: dg5!,
-      Dg6: dg6!, Dg7: dg7!, I: iVal!, W: wVal!, W_F: wfVal,
-    });
+    let calcVals: Record<string, number | string> = {};
+    let prs: Record<string, number | string> = {};
+    let normInfoStr = 'VLMT';
 
-    const rawValues: Record<string, number | string> = {
-      Dg1: dg1!, Dg2: dg2!, Dg3: dg3!, Dg4: dg4!, Dg5: dg5!,
-      Dg6: dg6!, Dg7: dg7!, I: iVal!, W: wVal!,
-    };
+    if (allRequired) {
+      const prResult = calculateVLMTPR(ageAtTest, {
+        Dg1: dg1!, Dg2: dg2!, Dg3: dg3!, Dg4: dg4!, Dg5: dg5!,
+        Dg6: dg6!, Dg7: dg7!, I: iVal!, W: wVal!, W_F: wfVal,
+      });
+      calcVals = prResult.calculated;
+      prs = prResult.prs;
+      normInfoStr = prResult.normInfo;
+    } else if (aborted && partialResult) {
+      calcVals = partialResult.calculated;
+      prs = partialResult.prs;
+      normInfoStr = partialResult.normInfo;
+    }
+
+    const rawValues: Record<string, number | string> = {};
+    if (dg1 !== null) rawValues.Dg1 = dg1;
+    if (dg2 !== null) rawValues.Dg2 = dg2;
+    if (dg3 !== null) rawValues.Dg3 = dg3;
+    if (dg4 !== null) rawValues.Dg4 = dg4;
+    if (dg5 !== null) rawValues.Dg5 = dg5;
+    if (dg6 !== null) rawValues.Dg6 = dg6;
+    if (dg7 !== null) rawValues.Dg7 = dg7;
+    if (iVal !== null) rawValues.I = iVal;
+    if (wVal !== null) rawValues.W = wVal;
     if (fpBVal !== null) rawValues.FP_B = fpBVal;
     if (fpVal  !== null) rawValues.FP   = fpVal;
     if (wfVal  !== null) rawValues.W_F  = wfVal;
@@ -158,11 +196,13 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
       testId: 'vlmt',
       date,
       rawValues,
-      calculatedValues: prResult.calculated,
-      percentileRanks: prResult.prs,
-      normInfo: prResult.normInfo,
+      calculatedValues: calcVals,
+      percentileRanks: prs,
+      normInfo: normInfoStr,
       examiner,
       note,
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -172,7 +212,10 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
+    setAborted(false); setAbortComment('');
   };
+
+  useShortcutSave(handleSave);
 
   const setInput = (field: string, value: string) =>
     setInputs(prev => ({ ...prev, [field]: value }));
@@ -242,9 +285,9 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                 <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-xs">
                   <span className="text-indigo-400 dark:text-indigo-500 font-bold">Σ(1–5) =</span>
                   <span className="font-black text-indigo-700 dark:text-indigo-300">{sumDg1_5}</span>
-                  {liveResult?.prs.sumDg1_5 !== undefined && liveResult.prs.sumDg1_5 !== 'n/a' && (
-                    <span className={cn('ml-auto px-2 py-0.5 rounded-lg font-black text-[10px]', prColorCls(liveResult.prs.sumDg1_5))}>
-                      PR {liveResult.prs.sumDg1_5}
+                  {partialResult?.prs.sumDg1_5 !== undefined && partialResult.prs.sumDg1_5 !== 'n/a' && (
+                    <span className={cn('ml-auto px-2 py-0.5 rounded-lg font-black text-[10px]', prColorCls(partialResult.prs.sumDg1_5))}>
+                      PR {partialResult.prs.sumDg1_5}
                     </span>
                   )}
                 </div>
@@ -288,9 +331,9 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-xs">
                       <span className="text-amber-500 dark:text-amber-400 font-bold">Δ5–6 =</span>
                       <span className="font-black text-amber-700 dark:text-amber-300">{delta5_6}</span>
-                      {liveResult?.prs.Dg5_Dg6 !== undefined && liveResult.prs.Dg5_Dg6 !== 'n/a' && (
-                        <span className={cn('ml-auto px-1.5 py-0.5 rounded-lg font-black text-[10px]', prColorCls(liveResult.prs.Dg5_Dg6))}>
-                          PR {liveResult.prs.Dg5_Dg6}
+                      {partialResult?.prs.Dg5_Dg6 !== undefined && partialResult.prs.Dg5_Dg6 !== 'n/a' && (
+                        <span className={cn('ml-auto px-1.5 py-0.5 rounded-lg font-black text-[10px]', prColorCls(partialResult.prs.Dg5_Dg6))}>
+                          PR {partialResult.prs.Dg5_Dg6}
                         </span>
                       )}
                     </div>
@@ -299,9 +342,9 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-xs">
                       <span className="text-amber-500 dark:text-amber-400 font-bold">Δ5–7 =</span>
                       <span className="font-black text-amber-700 dark:text-amber-300">{delta5_7}</span>
-                      {liveResult?.prs.Dg5_Dg7 !== undefined && liveResult.prs.Dg5_Dg7 !== 'n/a' && (
-                        <span className={cn('ml-auto px-1.5 py-0.5 rounded-lg font-black text-[10px]', prColorCls(liveResult.prs.Dg5_Dg7))}>
-                          PR {liveResult.prs.Dg5_Dg7}
+                      {partialResult?.prs.Dg5_Dg7 !== undefined && partialResult.prs.Dg5_Dg7 !== 'n/a' && (
+                        <span className={cn('ml-auto px-1.5 py-0.5 rounded-lg font-black text-[10px]', prColorCls(partialResult.prs.Dg5_Dg7))}>
+                          PR {partialResult.prs.Dg5_Dg7}
                         </span>
                       )}
                     </div>
@@ -378,11 +421,11 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
               {/* Auto-berechnetes W_F */}
               {wfVal !== null && (
                 <div className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-xs">
-                  <span className="text-slate-400 dark:text-slate-500 font-bold">Korr. Wiedererkennen (W−FP) =</span>
+                  <span className="text-slate-400 dark:text-slate-500 font-bold">Korr. Wiedererkennen (W−FP-B−FP) =</span>
                   <span className="font-black text-slate-700 dark:text-slate-200">{wfVal}</span>
-                  {liveResult?.prs.W_F !== undefined && liveResult.prs.W_F !== 'n/a' && (
-                    <span className={cn('ml-auto px-2 py-0.5 rounded-lg font-black text-[10px]', prColorCls(liveResult.prs.W_F))}>
-                      PR {liveResult.prs.W_F}
+                  {partialResult?.prs.W_F !== undefined && partialResult.prs.W_F !== 'n/a' && (
+                    <span className={cn('ml-auto px-2 py-0.5 rounded-lg font-black text-[10px]', prColorCls(partialResult.prs.W_F))}>
+                      PR {partialResult.prs.W_F}
                     </span>
                   )}
                 </div>
@@ -390,14 +433,15 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
             </div>
 
             <NoteField value={note} onChange={setNote} />
+            <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
             <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
           </div>
 
           {/* Norm info */}
-          {liveResult && (
+          {partialResult && (
             <div className="px-4 py-3 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
               <span className="font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Norm: </span>
-              {liveResult.normInfo}
+              {partialResult.normInfo}
             </div>
           )}
         </div>
@@ -405,7 +449,7 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
         {/* ── RIGHT: Live PRs + History ── */}
         <div className="space-y-4">
           {/* Live PR panel */}
-          {liveResult && (
+          {partialResult && Object.keys(partialResult.prs).length > 0 && (
             <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
               <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                 <Brain size={13} className="text-indigo-500" />
@@ -413,8 +457,8 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
               </h3>
               <div className="space-y-1.5">
                 {MEASURES.map(m => {
-                  const pr = liveResult.prs[m.key];
-                  if (pr === 'n/a') return null;
+                  const pr = partialResult.prs[m.key];
+                  if (pr === undefined || pr === 'n/a') return null;
                   const rawVal = (() => {
                     if (m.key === 'sumDg1_5') return sumDg1_5;
                     if (m.key === 'Dg5_Dg6') return delta5_6;
@@ -460,6 +504,10 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                       <th className="px-2 py-2.5 text-center">Δ5–7</th>
                       <th className="px-2 py-2.5 text-center">PR Σ</th>
                       <th className="px-2 py-2.5 text-center">PR Dg7</th>
+                      <th className="px-2 py-2.5 text-center">W</th>
+                      <th className="px-2 py-2.5 text-center">PR W</th>
+                      <th className="px-2 py-2.5 text-center">W−FP-B−FP</th>
+                      <th className="px-2 py-2.5 text-center">PR W−FP</th>
                       {patient.status !== 'entlassen' && <th className="px-2 py-2.5 w-14" />}
                     </tr>
                   </thead>
@@ -473,7 +521,10 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                         )}
                       >
                         <td className="px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                          {formatDate(res.date)}
+                          <div className="flex items-center gap-1.5">
+                            {formatDate(res.date)}
+                            {res.aborted && <AbortBadge comment={res.abortComment} />}
+                          </div>
                         </td>
                         <td className="px-2 py-2.5 text-center font-mono text-slate-600 dark:text-slate-300">
                           {res.calculatedValues.sumDg1_5}
@@ -501,6 +552,22 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
                         <td className="px-2 py-2.5 text-center">
                           {res.percentileRanks.Dg7 !== undefined && res.percentileRanks.Dg7 !== 'n/a' && (
                             <PrBadge value={res.percentileRanks.Dg7} />
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {res.rawValues.W ?? '–'}
+                        </td>
+                        <td className="px-2 py-2.5 text-center">
+                          {res.percentileRanks.W !== undefined && res.percentileRanks.W !== 'n/a' && (
+                            <PrBadge value={res.percentileRanks.W} />
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {res.rawValues.W_F !== undefined ? res.rawValues.W_F : '–'}
+                        </td>
+                        <td className="px-2 py-2.5 text-center">
+                          {res.percentileRanks.W_F !== undefined && res.percentileRanks.W_F !== 'n/a' && (
+                            <PrBadge value={res.percentileRanks.W_F} />
                           )}
                         </td>
                         {patient.status !== 'entlassen' && (

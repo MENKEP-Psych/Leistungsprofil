@@ -83,6 +83,12 @@ export async function fetchPatient(
     lokalisation: row.encryptedLokalisation
       ? (decryptData(row.encryptedLokalisation, encryptionKey) as string) || undefined
       : undefined,
+    station: row.encryptedStation
+      ? (decryptData(row.encryptedStation, encryptionKey) as string) || undefined
+      : undefined,
+    zimmer: row.encryptedZimmer
+      ? (decryptData(row.encryptedZimmer, encryptionKey) as string) || undefined
+      : undefined,
     status: row.status as 'aktiv' | 'entlassen',
     age: calculateAge((decryptData(row.encryptedGeburtsdatum, encryptionKey) as string) || '', sorted[0]?.date),
     createdBy: row.createdBy ?? undefined,
@@ -107,6 +113,8 @@ export async function dbCreatePatient(p: Patient, encryptionKey: string, created
     encryptedEntlassdatum: p.entlassdatum ? encryptData(p.entlassdatum, encryptionKey) as string : null,
     encryptedDiagnose: p.diagnose ? encryptData(p.diagnose, encryptionKey) as string : null,
     encryptedLokalisation: p.lokalisation ? encryptData(p.lokalisation, encryptionKey) as string : null,
+    encryptedStation: p.station ? encryptData(p.station, encryptionKey) as string : null,
+    encryptedZimmer: p.zimmer ? encryptData(p.zimmer, encryptionKey) as string : null,
     encryptedGeneralNote: encryptData('', encryptionKey) as string,
     createdBy,
   };
@@ -117,7 +125,7 @@ export async function dbCreatePatient(p: Patient, encryptionKey: string, created
 
 export async function dbUpdatePatient(
   id: string,
-  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>,
+  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation' | 'station' | 'zimmer'>>,
   encryptionKey: string
 ): Promise<boolean> {
   if (!isElectron()) return updatePatientLocal(id, updates);
@@ -132,6 +140,8 @@ export async function dbUpdatePatient(
   if ('entlassdatum' in updates) payload.encryptedEntlassdatum = updates.entlassdatum ? encryptData(updates.entlassdatum, encryptionKey) as string : null;
   if ('diagnose' in updates) payload.encryptedDiagnose = updates.diagnose ? encryptData(updates.diagnose, encryptionKey) as string : null;
   if ('lokalisation' in updates) payload.encryptedLokalisation = updates.lokalisation ? encryptData(updates.lokalisation, encryptionKey) as string : null;
+  if ('station' in updates) payload.encryptedStation = updates.station ? encryptData(updates.station, encryptionKey) as string : null;
+  if ('zimmer' in updates) payload.encryptedZimmer = updates.zimmer ? encryptData(updates.zimmer, encryptionKey) as string : null;
 
   return getElectronAPI().updatePatient(id, payload);
 }
@@ -308,6 +318,16 @@ export async function dbChangePassword(username: string, newPassword: string) {
   return getElectronAPI().changePassword(username, newPassword);
 }
 
+export async function dbChangeRole(username: string, newRole: 'admin' | 'user') {
+  if (!isElectron()) {
+    const users = await ensureWebUsers();
+    const updated = users.map(u => u.username === username ? { ...u, role: newRole } : u);
+    saveWebUsers(updated);
+    return { success: true };
+  }
+  return getElectronAPI().changeRole(username, newRole);
+}
+
 export async function dbGetRecoveryKey(): Promise<string> {
   if (!isElectron()) return '';
   return getElectronAPI().getRecoveryKey();
@@ -345,6 +365,23 @@ export async function dbSyncSetServerPath(p: string) {
 export async function dbSyncHasLocalChanges(): Promise<boolean> {
   if (!isElectron()) return false;
   return getElectronAPI().syncHasLocalChanges();
+}
+
+// ── PDF ───────────────────────────────────────────────────────────────────────
+
+export async function dbGetPdfFolder(): Promise<string> {
+  if (!isElectron()) return '';
+  return getElectronAPI().getPdfFolder();
+}
+
+export async function dbSetPdfFolder(folder: string) {
+  if (!isElectron()) return { success: true };
+  return getElectronAPI().setPdfFolder(folder);
+}
+
+export async function dbSavePdf(filename: string, bytes: number[]) {
+  if (!isElectron()) return { success: false, error: 'Not in Electron' };
+  return getElectronAPI().savePdf(filename, bytes);
 }
 
 // ── All active patients with results (for TAP-Täglich PDF) ────────────────────

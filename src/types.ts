@@ -11,6 +11,8 @@ export interface Patient {
   entlassdatum?: string;  // YYYY-MM-DD
   diagnose?: string;
   lokalisation?: string;
+  station?: string;
+  zimmer?: string;
   createdBy?: string;
 }
 
@@ -55,6 +57,11 @@ export interface PRResult {
   previousDetails?: string[];
   note?: string;
   tapVersion?: 'M' | '2.3';
+  lpsKorrektur?: string;
+  aborted?: boolean;
+  abortComment?: string;
+  prevAborted?: boolean;
+  prevAbortComment?: string;
 }
 
 export interface TestResult {
@@ -62,12 +69,14 @@ export interface TestResult {
   testId: string;
   date: string;
   rawValues: Record<string, number | string>;
-  calculatedValues: Record<string, number>;
+  calculatedValues: Record<string, number | string>;
   percentileRanks: Record<string, number | string>;
   normInfo: string;
   examiner?: string;
   domainMapping?: Record<string, string>;
   note?: string;
+  aborted?: boolean;
+  abortComment?: string;
 }
 
 export interface TestConfig {

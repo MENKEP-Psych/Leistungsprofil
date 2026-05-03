@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { Save, History, CheckCircle2, Pencil, X, CalendarDays, Trash2, Check } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { PageHeader } from './TestForm';
+import { PageHeader, AbortButton, AbortBadge } from './TestForm';
 
 interface TagesplanTabProps {
   patient: Patient;
@@ -29,6 +30,8 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const tagesplanResults = previousResults
     .filter(r => r.testId === 'tagesplan')
@@ -40,6 +43,7 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setEditingId(null);
+    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -48,6 +52,8 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
     setExaminer(res.examiner ?? '');
     setPlanText(String(res.rawValues.planText ?? ''));
     setNote(res.note ?? '');
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const handleSave = () => {
@@ -61,6 +67,8 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
       normInfo: 'Tagesplan – Qualitative Auswertung',
       examiner,
       note,
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
     if (editingId) {
       onUpdate(result);
@@ -72,6 +80,8 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
     setTimeout(() => setLastSaved(false), 3000);
     resetForm();
   };
+
+  useShortcutSave(handleSave);
 
   return (
     <div className="space-y-6">
@@ -142,6 +152,8 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
               />
             </div>
 
+            <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
+
             <button
               onClick={handleSave}
               className={cn(
@@ -187,9 +199,10 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({
                   )}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{formatDate(res.date)}</span>
-                      {res.examiner && <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-2">· {res.examiner}</span>}
+                      {res.aborted && <AbortBadge comment={res.abortComment} />}
+                      {res.examiner && <span className="text-[10px] text-slate-400 dark:text-slate-500">· {res.examiner}</span>}
                     </div>
                     {patient.status !== 'entlassen' && (
                       <div className="flex items-center gap-1 shrink-0">

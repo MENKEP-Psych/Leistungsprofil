@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { PenLine } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
@@ -6,7 +7,7 @@ import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { calculateROCFTPR } from '../lib/rocft';
 import {
-  prColorCls, PrBadge, TestMeta, NoteField, FormSave,
+  prColorCls, PrBadge, TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
@@ -31,6 +32,8 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const results = previousResults
     .filter(r => r.testId === 'rey')
@@ -56,6 +59,7 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
     setRawCFT(''); setRawCFM(''); setRawCQM(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
+    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -66,12 +70,14 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
     setDate(res.date);
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!hasAnyValue) return;
+    if (!aborted && !hasAnyValue) return;
 
     const prResult = calculateROCFTPR(ageAtTest, { cft: cftVal, cfm: cfmVal, cqm: cqmVal });
 
@@ -96,12 +102,16 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
       percentileRanks,
       normInfo: prResult.normInfo,
       domainMapping: { rey: '3. Visuo-Perz. / Visuo-Konstr. Leistungen' },
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true);
     setTimeout(() => setLastSaved(false), 3000);
     reset();
   };
+
+  useShortcutSave(handleSave);
 
   const SCALES = [
     { key: 'cft', label: 'CFT – Kopieren',   val: rawCFT, set: setRawCFT, max: 36 },
@@ -152,6 +162,7 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
             </div>
 
             <NoteField value={note} onChange={setNote} />
+            <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
             <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
           </div>
 
@@ -214,7 +225,12 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
                           editingId === res.id && 'bg-indigo-50/60 dark:bg-indigo-900/30',
                         )}
                       >
-                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{formatDate(res.date)}</td>
+                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">
+                          <div className="flex items-center gap-1.5">
+                            {formatDate(res.date)}
+                            {res.aborted && <AbortBadge comment={res.abortComment} />}
+                          </div>
+                        </td>
                         <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">{res.rawValues.cft ?? '–'}</td>
                         <td className="px-3 py-3 text-center">
                           {res.percentileRanks.cft !== undefined && res.percentileRanks.cft !== 'n/a'

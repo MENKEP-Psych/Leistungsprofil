@@ -29,6 +29,7 @@ const api: ElectronAPI = {
   deleteUser: (u) => ipcRenderer.invoke('db:deleteUser', u),
   getUsers: () => ipcRenderer.invoke('db:getUsers'),
   changePassword: (u, p) => ipcRenderer.invoke('db:changePassword', u, p),
+  changeRole: (u, r) => ipcRenderer.invoke('db:changeRole', u, r),
 
   // DB path configuration (local working copy)
   getDbPath: () => ipcRenderer.invoke('db:getDbPath'),
@@ -47,6 +48,11 @@ const api: ElectronAPI = {
   syncGetServerPath: () => ipcRenderer.invoke('sync:getServerPath'),
   syncSetServerPath: (p) => ipcRenderer.invoke('sync:setServerPath', p),
   syncHasLocalChanges: () => ipcRenderer.invoke('sync:hasLocalChanges'),
+
+  // PDF
+  getPdfFolder: () => ipcRenderer.invoke('config:getPdfFolder'),
+  setPdfFolder: (folder) => ipcRenderer.invoke('config:setPdfFolder', folder),
+  savePdf: (filename, bytes) => ipcRenderer.invoke('dialog:savePdf', filename, bytes),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

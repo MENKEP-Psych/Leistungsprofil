@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Patient, TestResult } from '../types';
 import { formatDate } from './utils';
 import { TAP_PR_MAP, TAP_VE_PR_MAP } from '../components/TAPTab';
+import { isElectron, dbSavePdf } from './db-api';
 
 const ALL_TAP_COLUMNS = [
   ...TAP_PR_MAP.map(m => ({ key: m.key as string, label: m.label as string })),
@@ -43,7 +44,7 @@ function getCellContent(tapResults: TestResult[], measureIdx: number, prKey: str
   return res.rawValues[`flag_${prKey}`] ? sym + '!' : sym;
 }
 
-export function exportTapDailyPDF(data: { patient: Patient; results: TestResult[] }[]): void {
+export async function exportTapDailyPDF(data: { patient: Patient; results: TestResult[] }[]): Promise<void> {
   try {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const PW = 297;
@@ -164,7 +165,13 @@ export function exportTapDailyPDF(data: { patient: Patient; results: TestResult[
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    doc.save(`TAP_Tagesuebersicht_${dateStr}.pdf`);
+    const filename = `TAP_Tagesuebersicht_${dateStr}.pdf`;
+    if (isElectron()) {
+      const uint8 = new Uint8Array(doc.output('arraybuffer') as ArrayBuffer);
+      await dbSavePdf(filename, Array.from(uint8));
+    } else {
+      doc.save(filename);
+    }
   } catch (err) {
     console.error('TAP-Täglich PDF Fehler:', err);
     alert(`PDF Fehler: ${err instanceof Error ? err.message : String(err)}`);

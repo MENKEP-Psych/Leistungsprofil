@@ -37,7 +37,7 @@ export const Login: React.FC = () => {
           <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100 mb-2 tracking-tight">Klinik-Login</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mb-10 font-medium">Neuropsychologische Testauswertung</p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} data-enter-submit className="space-y-5">
             <div>
               <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 px-1">
                 Benutzername

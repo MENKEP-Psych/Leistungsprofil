@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShortcutSave } from '../hooks/useShortcutSave';
 import { BrainCircuit, AlertCircle } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
@@ -7,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import tolAlterNorms from '../data/tol_normen_alter.json';
 import tolBildungNorms from '../data/tol_normen_bildung.json';
 import {
-  prColorCls, PrBadge, TestMeta, NoteField, FormSave,
+  prColorCls, PrBadge, TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
   PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
 } from './TestForm';
 
@@ -68,6 +69,8 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [aborted, setAborted] = useState(false);
+  const [abortComment, setAbortComment] = useState('');
 
   const tolResults = previousResults
     .filter(r => r.testId === 'tol')
@@ -97,6 +100,8 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
     setErrors({});
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => {
@@ -105,29 +110,42 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setErrors({});
+    setAborted(false); setAbortComment('');
   };
 
   const handleSave = () => {
-    if (!validate()) return;
-    const rw = Number(rohwert);
-    const prAlter = lookupAlterPR(rw, ageAtTest);
-    const prBildung = hasBildung ? lookupAlterBildungPR(rw, ageAtTest, patient.bildungsjahre!) : undefined;
+    if (!aborted && !validate()) return;
 
-    const alterGroup = findAltergruppe(ageAtTest, tolAlterNorms.altersgruppen);
-    const prs: Record<string, number | string> = { alterkorrigiert: prAlter };
-    if (prBildung !== undefined) prs.alter_bildung = prBildung;
+    let rawVals: Record<string, number | string> = {};
+    let calcVals: Record<string, number | string> = {};
+    let prs: Record<string, number | string> = {};
+    let normInfoStr = `Altersgruppe: ${findAltergruppe(ageAtTest, tolAlterNorms.altersgruppen)?.label ?? 'Unbekannt'}${hasBildung ? `, Bildungsjahre: ${patient.bildungsjahre}` : ''}`;
+
+    if (!aborted || rohwert !== '') {
+      const rw = Number(rohwert);
+      const prAlter = lookupAlterPR(rw, ageAtTest);
+      const prBildung = hasBildung ? lookupAlterBildungPR(rw, ageAtTest, patient.bildungsjahre!) : undefined;
+      const alterGroup = findAltergruppe(ageAtTest, tolAlterNorms.altersgruppen);
+      rawVals = { rohwert: rw };
+      calcVals = { rohwert: rw };
+      prs = { alterkorrigiert: prAlter };
+      if (prBildung !== undefined) prs.alter_bildung = prBildung;
+      normInfoStr = `Altersgruppe: ${alterGroup?.label ?? 'Unbekannt'}${hasBildung ? `, Bildungsjahre: ${patient.bildungsjahre}` : ''}`;
+    }
 
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
       testId: 'tol',
       date,
-      rawValues: { rohwert: rw },
-      calculatedValues: { rohwert: rw },
+      rawValues: rawVals,
+      calculatedValues: calcVals,
       percentileRanks: prs,
-      normInfo: `Altersgruppe: ${alterGroup?.label ?? 'Unbekannt'}${hasBildung ? `, Bildungsjahre: ${patient.bildungsjahre}` : ''}`,
+      normInfo: normInfoStr,
       examiner,
       note,
       domainMapping: { alterkorrigiert: '5. Exekutive Funktionen', alter_bildung: '5. Exekutive Funktionen' },
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -136,7 +154,10 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
     setRohwert(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
+    setAborted(false); setAbortComment('');
   };
+
+  useShortcutSave(handleSave);
 
   return (
     <div className="space-y-6">
@@ -211,6 +232,7 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
             </div>
 
             <NoteField value={note} onChange={setNote} />
+            <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
             <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
           </div>
 
@@ -249,7 +271,12 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
                         editingId === res.id && 'bg-indigo-50/60 dark:bg-indigo-900/30',
                       )}
                     >
-                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{formatDate(res.date)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">
+                        <div className="flex items-center gap-1.5">
+                          {formatDate(res.date)}
+                          {res.aborted && <AbortBadge comment={res.abortComment} />}
+                        </div>
+                      </td>
                       <td className="px-3 py-3 text-center font-mono text-slate-600 dark:text-slate-300">
                         {res.rawValues.rohwert}
                       </td>

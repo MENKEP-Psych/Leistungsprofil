@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { Patient, TestResult, PRResult } from '../types';
 import { formatDate } from './utils';
 import { decodeField, decodeQuad } from '../components/NeglectShared';
+import { isElectron, dbSavePdf } from './db-api';
 
 // ── Neglect graphic helpers ───────────────────────────────────────────────────
 
@@ -282,6 +283,8 @@ function drawPageHeader(doc: jsPDF, patient: Patient, pageN: number) {
   const infoParts: string[] = [`*${formatDate(patient.geburtsdatum)}`];
   if (patient.bildungsjahre) infoParts.push(`Bildung: ${patient.bildungsjahre} J.`);
   if (patient.neuropsychologin) infoParts.push(`NP: ${patient.neuropsychologin}`);
+  if (patient.station) infoParts.push(`Station: ${patient.station}`);
+  if (patient.diagnose) infoParts.push(`Diag.: ${patient.diagnose}`);
   if (patient.aufnahmedatum) infoParts.push(`Aufn.: ${formatDate(patient.aufnahmedatum)}`);
   if (patient.entlassdatum) infoParts.push(`Entl.: ${formatDate(patient.entlassdatum)}`);
   doc.text(infoParts.join('   ·   '), M + 37, 12);
@@ -311,12 +314,12 @@ function sectionHeader(doc: jsPDF, y: number, title: string): number {
 
 // ── Main export function ──────────────────────────────────────────────────────
 
-export function exportProfilePDF(
+export async function exportProfilePDF(
   patient: Patient,
   profileData: PRResult[],
   results: TestResult[],
   generalNote: string,
-): void {
+): Promise<void> {
   try {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   let y = CS;
@@ -337,11 +340,19 @@ export function exportProfilePDF(
 
   // ── Patient info box ───────────────────────────────────────────────────────
 
+  const medParts: string[] = [];
+  if (patient.diagnose) medParts.push(`Diagnose: ${patient.diagnose}`);
+  if (patient.lokalisation) medParts.push(`Lok.: ${patient.lokalisation}`);
+  if (patient.station) medParts.push(`Station: ${patient.station}`);
+  if (patient.zimmer) medParts.push(`Zimmer: ${patient.zimmer}`);
+  const hasMedInfo = medParts.length > 0;
+  const boxH = hasMedInfo ? 30 : 24;
+
   const [br, bg, bb] = tint('#4338ca', 0.05);
   doc.setFillColor(br, bg, bb);
   doc.setDrawColor(210, 214, 253);
   doc.setLineWidth(0.3);
-  doc.rect(M, y, PW - 2 * M, 24, 'FD');
+  doc.rect(M, y, PW - 2 * M, boxH, 'FD');
 
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
@@ -366,11 +377,18 @@ export function exportProfilePDF(
   doc.setTextColor(71, 85, 105);
   doc.text(detailItems.join('   ·   '), M + 3, y + 18);
 
+  if (hasMedInfo) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(medParts.join('   ·   '), M + 3, y + 25);
+  }
+
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
   doc.text(`Exportiert am ${formatDate(new Date().toISOString().split('T')[0])}`, PW - M, y + 18, { align: 'right' });
 
-  y += 28;
+  y += boxH + 4;
 
   // ── PR CHART SECTION ───────────────────────────────────────────────────────
 
@@ -506,105 +524,161 @@ export function exportProfilePDF(
         ensure(9);
         const ROW_H = 8;
         const ri = rowIdx++;
+        const isAbortedNoData = result.aborted && (result.currentPr === 'n/a' || result.currentPr === undefined);
 
         const rowBg = ri % 2 === 0 ? 255 : 250;
-        doc.setFillColor(rowBg, rowBg, rowBg);
-        doc.rect(M, y, PW - 2 * M, ROW_H, 'F');
 
-        EQ_COLORS.forEach((col, i) => {
-          const [r, g, b] = hex2rgb(col);
-          doc.setFillColor(
-            Math.round(r * 0.10 + rowBg * 0.90),
-            Math.round(g * 0.10 + rowBg * 0.90),
-            Math.round(b * 0.10 + rowBg * 0.90),
-          );
-          doc.rect(CHTX + i * ZW, y, ZW, ROW_H, 'F');
-        });
+        if (isAbortedNoData) {
+          // Orange-tinted abort row
+          doc.setFillColor(255, 247, 237);
+          doc.rect(M, y, PW - 2 * M, ROW_H, 'F');
 
-        for (let i = 1; i < EQ_N; i++) {
-          const major = (i === 2 || i === 5);
-          doc.setDrawColor(major ? 100 : 210, major ? 110 : 215, major ? 135 : 230);
-          doc.setLineWidth(major ? 0.4 : 0.15);
-          doc.line(CHTX + i * ZW, y, CHTX + i * ZW, y + ROW_H);
-        }
+          // Left sidebar stripe
+          doc.setFillColor(253, 186, 116); // orange-300
+          doc.rect(M, y, 1.5, ROW_H, 'F');
 
-        const cNum = prToNum(result.currentPr);
-        const cRng = parseRange(result.currentPr);
-        const [cr, cg, cb] = hex2rgb(zoneColor(cNum));
+          // Label
+          doc.setFontSize(7);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 23, 42);
+          drawTextWithSigma(doc, result.label, M + 3, y + 3.6);
 
-        if (result.previousPr !== undefined) {
-          const pNum = prToNum(result.previousPr);
-          const pRng = parseRange(result.previousPr);
-          const [pr2, pg2, pb2] = hex2rgb(zoneColor(pNum));
-          doc.setDrawColor(pr2, pg2, pb2);
-          doc.setFillColor(255, 255, 255);
-          doc.setLineWidth(0.5);
-          if (pRng) {
-            const px = prEqX(pRng[0]);
-            const pw = Math.max(prEqX(pRng[1]) - px, 1.5);
-            doc.rect(px, y + 1.5, pw, ROW_H - 3, 'FD');
-          } else {
-            doc.rect(prEqX(pNum) - 1.5, y + 1.5, 3, ROW_H - 3, 'FD');
-          }
-        }
+          // Abort comment in chart area
+          doc.setFontSize(6.5);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(194, 65, 12);
+          const abortText = result.abortComment || 'Test abgebrochen / unvollständig';
+          const maxAbortW = CHTW + PR_COL_W - 4;
+          const abortLine = doc.splitTextToSize(abortText, maxAbortW)[0] as string;
+          doc.text(abortLine, CHTX + 2, y + 3.6);
 
-        doc.setLineWidth(0);
-        if (cRng) {
-          const [lo, hi] = cRng;
-          const barY = y + 1.5;
-          const barH = ROW_H - 3;
-          const activeSegs = ZONES.filter(z => z.max > lo && z.min < hi);
-          activeSegs.forEach((z, si) => {
-            const segLo = Math.max(lo, z.min);
-            const segHi = Math.min(hi, z.max);
-            const sx = prEqX(segLo);
-            const sw = Math.max(prEqX(segHi) - sx, 0.3);
-            const [zr, zg, zb] = hex2rgb(z.color);
-            doc.setFillColor(zr, zg, zb);
-            doc.setLineWidth(0);
-            doc.rect(sx, barY, sw, barH, 'F');
-            doc.setDrawColor(zr, zg, zb);
-            doc.setLineWidth(0.5);
-            doc.line(sx, barY,        sx + sw, barY);
-            doc.line(sx, barY + barH, sx + sw, barY + barH);
-            if (si === 0)                     doc.line(sx,      barY, sx,      barY + barH);
-            if (si === activeSegs.length - 1) doc.line(sx + sw, barY, sx + sw, barY + barH);
-          });
-        } else {
-          doc.setFillColor(cr, cg, cb);
-          doc.rect(prEqX(cNum) - 1.5, y + 1.5, 3, ROW_H - 3, 'F');
-        }
-
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        drawTextWithSigma(doc, result.label, M, y + 3.6);
-        if (result.tapVersion) {
-          const labelWidth = doc.getTextWidth(result.label);
-          doc.setTextColor(217, 119, 6);
+          // "Abgebr." in PR column
           doc.setFontSize(6);
           doc.setFont('helvetica', 'bold');
-          doc.text(` ${result.tapVersion}`, M + labelWidth, y + 3.6);
-          doc.setTextColor(15, 23, 42);
+          doc.setTextColor(194, 65, 12);
+          doc.text('Abgebr.', PRX, y + 3.6);
+
+          // Previous PR (outlined, if any)
+          if (result.previousPr !== undefined) {
+            const pNum = prToNum(result.previousPr);
+            const [pr2, pg2, pb2] = hex2rgb(zoneColor(pNum));
+            doc.setDrawColor(pr2, pg2, pb2);
+            doc.setFillColor(255, 255, 255);
+            doc.setLineWidth(0.5);
+            doc.rect(prEqX(pNum) - 1.5, y + 1.5, 3, ROW_H - 3, 'FD');
+            doc.setFontSize(5.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(150, 160, 180);
+            doc.text(`(${result.previousPr})`, PRX, y + 6.8);
+          }
+        } else {
+          doc.setFillColor(rowBg, rowBg, rowBg);
+          doc.rect(M, y, PW - 2 * M, ROW_H, 'F');
+
+          EQ_COLORS.forEach((col, i) => {
+            const [r, g, b] = hex2rgb(col);
+            doc.setFillColor(
+              Math.round(r * 0.10 + rowBg * 0.90),
+              Math.round(g * 0.10 + rowBg * 0.90),
+              Math.round(b * 0.10 + rowBg * 0.90),
+            );
+            doc.rect(CHTX + i * ZW, y, ZW, ROW_H, 'F');
+          });
+
+          for (let i = 1; i < EQ_N; i++) {
+            const major = (i === 2 || i === 5);
+            doc.setDrawColor(major ? 100 : 210, major ? 110 : 215, major ? 135 : 230);
+            doc.setLineWidth(major ? 0.4 : 0.15);
+            doc.line(CHTX + i * ZW, y, CHTX + i * ZW, y + ROW_H);
+          }
+
+          const cNum = prToNum(result.currentPr);
+          const cRng = parseRange(result.currentPr);
+          const [cr, cg, cb] = hex2rgb(zoneColor(cNum));
+
+          if (result.previousPr !== undefined) {
+            const pNum = prToNum(result.previousPr);
+            const pRng = parseRange(result.previousPr);
+            const [pr2, pg2, pb2] = hex2rgb(zoneColor(pNum));
+            doc.setDrawColor(pr2, pg2, pb2);
+            doc.setFillColor(255, 255, 255);
+            doc.setLineWidth(0.5);
+            if (pRng) {
+              const px = prEqX(pRng[0]);
+              const pw = Math.max(prEqX(pRng[1]) - px, 1.5);
+              doc.rect(px, y + 1.5, pw, ROW_H - 3, 'FD');
+            } else {
+              doc.rect(prEqX(pNum) - 1.5, y + 1.5, 3, ROW_H - 3, 'FD');
+            }
+          }
+
+          doc.setLineWidth(0);
+          if (cRng) {
+            const [lo, hi] = cRng;
+            const barY = y + 1.5;
+            const barH = ROW_H - 3;
+            const activeSegs = ZONES.filter(z => z.max > lo && z.min < hi);
+            activeSegs.forEach((z, si) => {
+              const segLo = Math.max(lo, z.min);
+              const segHi = Math.min(hi, z.max);
+              const sx = prEqX(segLo);
+              const sw = Math.max(prEqX(segHi) - sx, 0.3);
+              const [zr, zg, zb] = hex2rgb(z.color);
+              doc.setFillColor(zr, zg, zb);
+              doc.setLineWidth(0);
+              doc.rect(sx, barY, sw, barH, 'F');
+              doc.setDrawColor(zr, zg, zb);
+              doc.setLineWidth(0.5);
+              doc.line(sx, barY,        sx + sw, barY);
+              doc.line(sx, barY + barH, sx + sw, barY + barH);
+              if (si === 0)                     doc.line(sx,      barY, sx,      barY + barH);
+              if (si === activeSegs.length - 1) doc.line(sx + sw, barY, sx + sw, barY + barH);
+            });
+          } else {
+            doc.setFillColor(cr, cg, cb);
+            doc.rect(prEqX(cNum) - 1.5, y + 1.5, 3, ROW_H - 3, 'F');
+          }
+
           doc.setFontSize(7);
-        }
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 23, 42);
+          drawTextWithSigma(doc, result.label, M, y + 3.6);
+          if (result.tapVersion) {
+            const labelWidth = doc.getTextWidth(result.label);
+            doc.setTextColor(217, 119, 6);
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.text(` ${result.tapVersion}`, M + labelWidth, y + 3.6);
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(7);
+          }
+          if (result.lpsKorrektur) {
+            const labelWidth = doc.getTextWidth(result.label);
+            doc.setTextColor(3, 105, 161); // sky-700
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.text(` [${result.lpsKorrektur}]`, M + labelWidth, y + 3.6);
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(7);
+          }
 
-        if (result.details?.[0]) {
-          doc.setFontSize(5.5);
-          doc.setFont('helvetica', 'italic');
-          doc.setTextColor(100, 116, 139);
-          drawTextWithSigma(doc, result.details[0], M, y + 6.8);
-        }
+          if (result.details?.[0]) {
+            doc.setFontSize(5.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 116, 139);
+            drawTextWithSigma(doc, result.details[0], M, y + 6.8);
+          }
 
-        doc.setFontSize(6.5);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(cr, cg, cb);
-        doc.text(String(result.currentPr), PRX, y + 3.6);
-        if (result.previousPr !== undefined) {
-          doc.setFontSize(5.5);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(150, 160, 180);
-          doc.text(`(${result.previousPr})`, PRX, y + 6.8);
+          doc.setFontSize(6.5);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(cr, cg, cb);
+          doc.text(String(result.currentPr), PRX, y + 3.6);
+          if (result.previousPr !== undefined) {
+            doc.setFontSize(5.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(150, 160, 180);
+            doc.text(`(${result.previousPr})`, PRX, y + 6.8);
+          }
         }
 
         y += ROW_H;
@@ -830,16 +904,14 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'Teil A (s)', 'PR A', 'Teil B (s)', 'PR B', 'Notiz']],
-      tmtResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${tmtResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        r.rawValues.A != null ? String(r.rawValues.A) : '–',
-        String(r.percentileRanks.A ?? '–'),
-        r.rawValues.B != null ? String(r.rawValues.B) : '–',
-        String(r.percentileRanks.B ?? '–'),
-        r.note || '–',
-      ]),
+      tmtResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${tmtResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          r.rawValues.A != null ? String(r.rawValues.A) : '–', String(r.percentileRanks.A ?? '–'),
+          r.rawValues.B != null ? String(r.rawValues.B) : '–', String(r.percentileRanks.B ?? '–'),
+          noteVal];
+      }),
     ) + 6;
   }
 
@@ -856,18 +928,11 @@ export function exportProfilePDF(
       [['', 'Datum', 'Untersucher', 'Dg1', 'Dg5', 'S1\u20135', 'Dg6', 'Dg7', 'WR', 'Notiz']],
       vlmtResults.map((r, i) => {
         const v = r.rawValues;
-        return [
-          i === 0 ? 'Aktuell' : `Messung ${vlmtResults.length - i}`,
-          formatDate(r.date),
-          r.examiner || '–',
-          String(v.Dg1 ?? '–'),
-          String(v.Dg5 ?? '–'),
-          String(r.calculatedValues.sumDg1_5 ?? '–'),
-          String(v.Dg6 ?? '–'),
-          String(v.Dg7 ?? '–'),
-          String(v.W ?? '–'),
-          r.note || '–',
-        ];
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${vlmtResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(v.Dg1 ?? '–'), String(v.Dg5 ?? '–'), String(r.calculatedValues.sumDg1_5 ?? '–'),
+          String(v.Dg6 ?? '–'), String(v.Dg7 ?? '–'), String(v.W ?? '–'), noteVal];
       }),
       undefined,
       {
@@ -909,15 +974,13 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'Rohwert', 'PR (Alter)', 'PR (Alter + Bildung)', 'Notiz']],
-      tolResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${tolResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.rawValues.rohwert ?? '–'),
-        String(r.percentileRanks.alterkorrigiert ?? '–'),
-        String(r.percentileRanks.alter_bildung ?? '–'),
-        r.note || '–',
-      ]),
+      tolResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${tolResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.rawValues.rohwert ?? '–'), String(r.percentileRanks.alterkorrigiert ?? '–'),
+          String(r.percentileRanks.alter_bildung ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -937,100 +1000,115 @@ export function exportProfilePDF(
       const msLabel = i === 0 ? 'Aktuell' : `Messung ${tapResults.length - i}`;
       const date  = formatDate(r.date);
       const exam  = r.examiner || '–';
+      const abortNote = r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : '';
+      const sessionNote = [r.note, abortNote].filter(Boolean).join(' | ') || '–';
+      const sessionLabel = r.aborted ? msLabel + ' (Abgebr.)' : msLabel;
 
-      const subtests: { subtest: string; vals: string; prVal: string }[] = [];
+      const subtestRows: Array<{sub: string; rt: string; sd: string; fehler: string; ausl: string; prVal: string}> = [];
 
-      const prStr  = (k: string) => { const v = String(pr[k]  ?? '').trim(); return v || '–'; };
-      const rvStr  = (k: string) => { const v = String(rv[k]  ?? '').trim(); return v || null; };
-      const sdPr   = (k: string) => { const v = String(rv[k]  ?? '').trim(); return v ? ` (SD-PR: ${v})` : ''; };
+      const vStr = (k: string) => { const x = String(rv[k] ?? '').trim(); return x || '–'; };
+      const pStr = (k: string) => { const x = String(pr[k] ?? '').trim(); return x || '–'; };
+      const sdPrStr = (k: string) => { const x = String(rv[k] ?? '').trim(); return x ? ` (SD-PR: ${x})` : ''; };
 
-      if (rv.alM_rt)
-        subtests.push({ subtest: 'Alertness [M]', vals: `M=${rv.alM_rt}ms, s=${rv.alM_sd ?? '–'}ms`, prVal: `${prStr('alertnessM')}${sdPr('alM_sd_pr')}` });
+      if (rv.alM_rt) subtestRows.push({
+        sub: 'Alertness [M]', rt: vStr('alM_rt'), sd: vStr('alM_sd'),
+        fehler: '–', ausl: '–', prVal: pStr('alertnessM') + sdPrStr('alM_sd_pr'),
+      });
+      if (rv.al23_ohne_rt) subtestRows.push({
+        sub: 'Alertness [2.3] ohne', rt: vStr('al23_ohne_rt'), sd: vStr('al23_ohne_sd'),
+        fehler: '–', ausl: '–', prVal: pStr('alertness23_ohne') + sdPrStr('al23_ohne_sd_pr'),
+      });
+      if (rv.al23_mit_rt) subtestRows.push({
+        sub: 'Alertness [2.3] mit', rt: vStr('al23_mit_rt'), sd: vStr('al23_mit_sd'),
+        fehler: '–', ausl: '–', prVal: pStr('alertness23_mit') + sdPrStr('al23_mit_sd_pr'),
+      });
+      if (rv.al23_phasisch) subtestRows.push({
+        sub: 'Alertness phasisch', rt: String(rv.al23_phasisch), sd: '–',
+        fehler: '–', ausl: '–', prVal: pStr('alertness23'),
+      });
 
-      if (rv.al23_ohne_rt || rv.al23_mit_rt) {
-        const parts: string[] = [];
-        if (rv.al23_ohne_rt) parts.push(`ohne M=${rv.al23_ohne_rt}ms${rv.al23_ohne_sd ? ` s=${rv.al23_ohne_sd}ms` : ''}`);
-        if (rv.al23_mit_rt)  parts.push(`mit M=${rv.al23_mit_rt}ms${rv.al23_mit_sd ? ` s=${rv.al23_mit_sd}ms` : ''}`);
-        if (rv.al23_phasisch) parts.push(`Kennwert=${rv.al23_phasisch}`);
-        const prParts: string[] = [];
-        if (pr.alertness23_ohne) prParts.push(`ohne: ${pr.alertness23_ohne}${sdPr('al23_ohne_sd_pr')}`);
-        if (pr.alertness23_mit)  prParts.push(`mit: ${pr.alertness23_mit}${sdPr('al23_mit_sd_pr')}`);
-        if (pr.alertness23)      prParts.push(`gesamt: ${pr.alertness23}`);
-        subtests.push({ subtest: 'Alertness [2.3]', vals: parts.join(', ') || '–', prVal: prParts.join(' | ') || '–' });
-      }
+      if (rv.gn_rt) subtestRows.push({
+        sub: 'Go/Nogo 1', rt: vStr('gn_rt'), sd: vStr('gn_sd'),
+        fehler: String(rv.gn_fehler ?? 0), ausl: String(rv.gn_ausl ?? 0),
+        prVal: pStr('gonogo') + sdPrStr('gn_sd_pr'),
+      });
+      if (rv.gn2_rt) subtestRows.push({
+        sub: 'Go/Nogo 2', rt: vStr('gn2_rt'), sd: vStr('gn2_sd'),
+        fehler: String(rv.gn2_fehler ?? 0), ausl: String(rv.gn2_ausl ?? 0),
+        prVal: pStr('gonogo2') + sdPrStr('gn2_sd_pr'),
+      });
+      if (rv.fl_rt) subtestRows.push({
+        sub: 'Flexibilität', rt: vStr('fl_rt'), sd: vStr('fl_sd'),
+        fehler: String(rv.fl_fehler ?? 0), ausl: '–',
+        prVal: pStr('flexibilitaet') + sdPrStr('fl_sd_pr'),
+      });
 
-      if (rv.gn_rt)
-        subtests.push({ subtest: 'Go/Nogo 1', vals: `M=${rv.gn_rt}ms, s=${rv.gn_sd ?? '–'}ms, Fehler=${rv.gn_fehler ?? 0}, Ausl.=${rv.gn_ausl ?? 0}`, prVal: `${prStr('gonogo')}${sdPr('gn_sd_pr')}` });
+      if (rv.ga_rt) subtestRows.push({
+        sub: 'Get. Aufm. auditiv', rt: vStr('ga_rt'), sd: vStr('ga_sd'),
+        fehler: '–', ausl: '–', prVal: pStr('geteilte') + sdPrStr('ga_sd_pr'),
+      });
+      if (rv.gv_rt) subtestRows.push({
+        sub: 'Get. Aufm. visuell', rt: vStr('gv_rt'), sd: vStr('gv_sd'),
+        fehler: '–', ausl: '–',
+        prVal: String(rv.gv_sd_pr ?? '').trim() ? `SD-PR: ${rv.gv_sd_pr}` : '–',
+      });
 
-      if (rv.gn2_rt)
-        subtests.push({ subtest: 'Go/Nogo 2', vals: `M=${rv.gn2_rt}ms, s=${rv.gn2_sd ?? '–'}ms, Fehler=${rv.gn2_fehler ?? 0}, Ausl.=${rv.gn2_ausl ?? 0}`, prVal: `${prStr('gonogo2')}${sdPr('gn2_sd_pr')}` });
+      if (rv.vig_rt) subtestRows.push({
+        sub: 'Vigilanz', rt: vStr('vig_rt'), sd: vStr('vig_sd'),
+        fehler: String(rv.vig_fehler ?? 0), ausl: String(rv.vig_ausl ?? 0),
+        prVal: pStr('vigilanz') + sdPrStr('vig_sd_pr'),
+      });
+      if (rv.ag_rt) subtestRows.push({
+        sub: 'Arbeitsgedächtnis', rt: vStr('ag_rt'), sd: vStr('ag_sd'),
+        fehler: String(rv.ag_fehler ?? 0), ausl: String(rv.ag_ausl ?? 0),
+        prVal: pStr('arbeitsgedaechtnis') + sdPrStr('ag_sd_pr'),
+      });
 
-      if (rv.fl_rt) {
-        const flPrParts: string[] = [];
-        if (pr.flexibilitaet) flPrParts.push(String(pr.flexibilitaet));
-        const flSdPr = rvStr('fl_sd_pr');
-        if (flSdPr) flPrParts.push(`SD-PR: ${flSdPr}`);
-        subtests.push({ subtest: 'Flexibilität', vals: `M=${rv.fl_rt}ms, s=${rv.fl_sd ?? '–'}ms, Fehler=${rv.fl_fehler ?? 0}`, prVal: flPrParts.join(' | ') || '–' });
-      }
-
-      if (rv.ga_rt || rv.gv_rt) {
-        const gaPrParts: string[] = [];
-        if (pr.geteilte) gaPrParts.push(String(pr.geteilte));
-        const gaSdPr = rvStr('ga_sd_pr'); if (gaSdPr) gaPrParts.push(`aud. SD-PR: ${gaSdPr}`);
-        const gvSdPr = rvStr('gv_sd_pr'); if (gvSdPr) gaPrParts.push(`vis. SD-PR: ${gvSdPr}`);
-        subtests.push({ subtest: 'Geteilte Aufm.', vals: `aud. M=${rv.ga_rt ?? '–'}ms s=${rv.ga_sd ?? '–'}ms, vis. M=${rv.gv_rt ?? '–'}ms s=${rv.gv_sd ?? '–'}ms`, prVal: gaPrParts.join(' | ') || '–' });
-      }
-
-      if (rv.vig_rt)
-        subtests.push({ subtest: 'Vigilanz', vals: `M=${rv.vig_rt}ms, s=${rv.vig_sd ?? '–'}ms, Fehler=${rv.vig_fehler ?? 0}, Ausl.=${rv.vig_ausl ?? 0}`, prVal: `${prStr('vigilanz')}${sdPr('vig_sd_pr')}` });
-
-      if (rv.ag_rt)
-        subtests.push({ subtest: 'Arbeitsgedächtnis', vals: `M=${rv.ag_rt}ms, s=${rv.ag_sd ?? '–'}ms, Fehler=${rv.ag_fehler ?? 0}, Ausl.=${rv.ag_ausl ?? 0}`, prVal: `${prStr('arbeitsgedaechtnis')}${sdPr('ag_sd_pr')}` });
-
-      // Visuelle Exploration – only add rows if any VE data is present
       if (rv.ve_rt_krit || rv.ve_rt_nkrit || rv.ve_fehler || rv.ve_zeilen_r) {
-        const veParts: string[] = [];
-        if (rv.ve_rt_krit)   veParts.push(`RT krit.=${rv.ve_rt_krit}ms`);
-        if (rv.ve_sd_krit)   veParts.push(`SD krit.=${rv.ve_sd_krit}ms`);
-        if (rv.ve_rt_nkrit)  veParts.push(`RT n-krit.=${rv.ve_rt_nkrit}ms`);
-        if (rv.ve_sd_nkrit)  veParts.push(`SD n-krit.=${rv.ve_sd_nkrit}ms`);
-        if (rv.ve_fehler)    veParts.push(`Fehler=${rv.ve_fehler}`);
-        if (rv.ve_ausl_krit) veParts.push(`Ausl.=${rv.ve_ausl_krit}`);
-        if (rv.ve_zeilen_r)  veParts.push(`Zeilen r=${rv.ve_zeilen_r}`);
-        if (rv.ve_spalten_r) veParts.push(`Spalten r=${rv.ve_spalten_r}`);
-        const vePrParts: string[] = [];
-        if (pr.ve_rt_krit_pr)   vePrParts.push(`RT krit.: ${pr.ve_rt_krit_pr}`);
-        if (pr.ve_sd_krit_pr)   vePrParts.push(`SD krit.: ${pr.ve_sd_krit_pr}`);
-        if (pr.ve_rt_nkrit_pr)  vePrParts.push(`RT n-krit.: ${pr.ve_rt_nkrit_pr}`);
-        if (pr.ve_sd_nkrit_pr)  vePrParts.push(`SD n-krit.: ${pr.ve_sd_nkrit_pr}`);
-        if (pr.ve_fehler_pr)    vePrParts.push(`Fehler: ${pr.ve_fehler_pr}`);
-        if (pr.ve_ausl_krit_pr) vePrParts.push(`Ausl.: ${pr.ve_ausl_krit_pr}`);
-        if (pr.ve_zeilen_r_pr)  vePrParts.push(`Zeilen r: ${pr.ve_zeilen_r_pr}`);
-        if (pr.ve_spalten_r_pr) vePrParts.push(`Spalten r: ${pr.ve_spalten_r_pr}`);
-        subtests.push({
-          subtest: 'Vis. Scanning',
-          vals: veParts.join(', ') || '–',
-          prVal: vePrParts.join(' | ') || '–',
+        if (rv.ve_rt_krit || rv.ve_sd_krit) subtestRows.push({
+          sub: 'Vis. Scanning krit.', rt: vStr('ve_rt_krit'), sd: vStr('ve_sd_krit'),
+          fehler: String(rv.ve_fehler ?? '–'), ausl: String(rv.ve_ausl_krit ?? '–'),
+          prVal: [
+            pr.ve_rt_krit_pr   ? `RT: ${pr.ve_rt_krit_pr}`     : '',
+            pr.ve_sd_krit_pr   ? `SD: ${pr.ve_sd_krit_pr}`     : '',
+            pr.ve_fehler_pr    ? `Fehl.: ${pr.ve_fehler_pr}`   : '',
+            pr.ve_ausl_krit_pr ? `Ausl.: ${pr.ve_ausl_krit_pr}` : '',
+          ].filter(Boolean).join(' | ') || '–',
+        });
+        if (rv.ve_rt_nkrit || rv.ve_sd_nkrit) subtestRows.push({
+          sub: 'Vis. Scanning n-krit.', rt: vStr('ve_rt_nkrit'), sd: vStr('ve_sd_nkrit'),
+          fehler: '–', ausl: '–',
+          prVal: [
+            pr.ve_rt_nkrit_pr ? `RT: ${pr.ve_rt_nkrit_pr}` : '',
+            pr.ve_sd_nkrit_pr ? `SD: ${pr.ve_sd_nkrit_pr}` : '',
+          ].filter(Boolean).join(' | ') || '–',
+        });
+        if (rv.ve_zeilen_r || rv.ve_spalten_r) subtestRows.push({
+          sub: 'Vis. Scanning (r)', rt: String(rv.ve_zeilen_r ?? '–'), sd: String(rv.ve_spalten_r ?? '–'),
+          fehler: '–', ausl: '–',
+          prVal: [
+            pr.ve_zeilen_r_pr  ? `Zeilen: ${pr.ve_zeilen_r_pr}`   : '',
+            pr.ve_spalten_r_pr ? `Spalten: ${pr.ve_spalten_r_pr}` : '',
+          ].filter(Boolean).join(' | ') || '–',
         });
       }
 
-      subtests.forEach((s, si) => {
+      subtestRows.forEach((s, si) => {
         tapRows.push([
-          si === 0 ? msLabel : '',
+          si === 0 ? sessionLabel : '',
           si === 0 ? date : '',
           si === 0 ? exam : '',
-          s.subtest,
-          s.vals,
-          s.prVal,
-          si === 0 ? (r.note || '–') : '',
+          s.sub, s.rt, s.sd, s.fehler, s.ausl, s.prVal,
+          si === 0 ? sessionNote : '',
         ]);
       });
     });
 
     y = renderTable(
       y,
-      [['', 'Datum', 'Untersucher', 'Subtest', 'Werte', 'PR', 'Notiz']],
+      [['', 'Datum', 'Untersucher', 'Subtest', 'M-RT (ms)', 'SD (ms)', 'Fehler', 'Ausl.', 'PR', 'Notiz']],
       tapRows,
+      [15, 18, 20, 35, 16, 14, 12, 12, 22, 22],
     ) + 6;
   }
 
@@ -1210,14 +1288,12 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'Ø WP', 'PR', 'Notiz']],
-      zztResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${zztResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.calculatedValues.wp ?? '–'),
-        String(r.percentileRanks.zzt ?? '–'),
-        r.note || '–',
-      ]),
+      zztResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${zztResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.calculatedValues.wp ?? '–'), String(r.percentileRanks.zzt ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -1232,16 +1308,13 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'Vorwärts', 'PR Vorw.', 'Rückwärts', 'PR Rückw.', 'Notiz']],
-      zahlenspanneResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${zahlenspanneResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.rawValues.vorwaerts ?? '–'),
-        String(r.percentileRanks.vorwaerts ?? '–'),
-        String(r.rawValues.rueckwaerts ?? '–'),
-        String(r.percentileRanks.rueckwaerts ?? '–'),
-        r.note || '–',
-      ]),
+      zahlenspanneResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${zahlenspanneResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.rawValues.vorwaerts ?? '–'), String(r.percentileRanks.vorwaerts ?? '–'),
+          String(r.rawValues.rueckwaerts ?? '–'), String(r.percentileRanks.rueckwaerts ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -1256,18 +1329,14 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'LG I', 'PR LG I', 'LG II', 'PR LG II', 'Wiedererk.', 'PR WE', 'Notiz']],
-      lgResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${lgResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.rawValues.lgI ?? '–'),
-        String(r.percentileRanks.lgI ?? '–'),
-        String(r.rawValues.lgII ?? '–'),
-        String(r.percentileRanks.lgII ?? '–'),
-        String(r.rawValues.wiedererk ?? '–'),
-        String(r.percentileRanks.wiedererk ?? '–'),
-        r.note || '–',
-      ]),
+      lgResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${lgResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.rawValues.lgI ?? '–'), String(r.percentileRanks.lgI ?? '–'),
+          String(r.rawValues.lgII ?? '–'), String(r.percentileRanks.lgII ?? '–'),
+          String(r.rawValues.wiedererk ?? '–'), String(r.percentileRanks.wiedererk ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -1282,15 +1351,13 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'Rohwert', 'AWP', 'PR', 'Notiz']],
-      mosaikResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${mosaikResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.rawValues.rohwert ?? '–'),
-        String(r.calculatedValues.awp ?? '–'),
-        String(r.percentileRanks.mosaik ?? '–'),
-        r.note || '–',
-      ]),
+      mosaikResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${mosaikResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.rawValues.rohwert ?? '–'), String(r.calculatedValues.awp ?? '–'),
+          String(r.percentileRanks.mosaik ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -1305,15 +1372,13 @@ export function exportProfilePDF(
     y = renderTable(
       y,
       [['', 'Datum', 'Untersucher', 'CFT (Kopieren)', 'CFM (Direkt)', 'CQM (Verzögert)', 'Notiz']],
-      reyResults.map((r, i) => [
-        i === 0 ? 'Aktuell' : `Messung ${reyResults.length - i}`,
-        formatDate(r.date),
-        r.examiner || '–',
-        String(r.rawValues.cft ?? '–'),
-        String(r.rawValues.cfm ?? '–'),
-        String(r.rawValues.cqm ?? '–'),
-        r.note || '–',
-      ]),
+      reyResults.map((r, i) => {
+        const msLabel = (i === 0 ? 'Aktuell' : `Messung ${reyResults.length - i}`) + (r.aborted ? ' (Abgebr.)' : '');
+        const noteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
+        return [msLabel, formatDate(r.date), r.examiner || '–',
+          String(r.rawValues.cft ?? '–'), String(r.rawValues.cfm ?? '–'),
+          String(r.rawValues.cqm ?? '–'), noteVal];
+      }),
     ) + 6;
   }
 
@@ -1343,18 +1408,20 @@ export function exportProfilePDF(
         try { parsedRows = JSON.parse(String(r.rawValues.rows ?? '[]')); } catch { /* ignore */ }
         const msLabel = ri === 0 ? 'Aktuell' : `Messung ${rList.length - ri}`;
 
+        const abortedLabel = msLabel + (r.aborted ? ' (Abgebr.)' : '');
+        const abortNoteVal = [r.note, r.aborted && r.abortComment ? `Abbruch: ${r.abortComment}` : ''].filter(Boolean).join(' | ') || '–';
         if (parsedRows.length === 0) {
-          body.push([msLabel, formatDate(r.date), r.examiner || '–', '–', '–', '–', r.note || '–']);
+          body.push([abortedLabel, formatDate(r.date), r.examiner || '–', '–', '–', '–', abortNoteVal]);
         } else {
           parsedRows.forEach((row, rowIdx) => {
             body.push([
-              rowIdx === 0 ? msLabel : '',
+              rowIdx === 0 ? abortedLabel : '',
               rowIdx === 0 ? formatDate(r.date) : '',
               rowIdx === 0 ? (r.examiner || '–') : '',
               row.label || '–',
               row.value || '–',
               row.pr || '–',
-              rowIdx === 0 ? (r.note || '–') : '',
+              rowIdx === 0 ? abortNoteVal : '',
             ]);
           });
         }
@@ -1364,25 +1431,18 @@ export function exportProfilePDF(
     }
   }
 
-  // ── GENERAL NOTE ──
-  if (generalNote?.trim()) {
-    ensure(20);
-    y = sectionHeader(doc, y, 'Allgemeine Notiz');
-    doc.setFontSize(8.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    const lines = doc.splitTextToSize(generalNote.trim(), PW - 2 * M);
-    ensure(lines.length * 4.5 + 4);
-    doc.text(lines, M, y);
-    y += lines.length * 4.5 + 6;
-  }
-
   // Save
   const nameParts = patient.name.trim().split(' ');
   const lastName  = nameParts[nameParts.length - 1];
   const firstName = nameParts.slice(0, -1).join(' ');
   const dateStr = new Date().toISOString().split('T')[0];
-  doc.save(`${lastName}, ${firstName} ${dateStr} Leistungsprofil.pdf`);
+  const filename = `${lastName}, ${firstName} ${dateStr} Leistungsprofil.pdf`;
+  if (isElectron()) {
+    const uint8 = new Uint8Array(doc.output('arraybuffer') as ArrayBuffer);
+    await dbSavePdf(filename, Array.from(uint8));
+  } else {
+    doc.save(filename);
+  }
   } catch (err) {
     console.error('PDF Export Fehler:', err);
     alert(`PDF Export fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
