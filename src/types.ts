@@ -6,13 +6,13 @@ export interface Patient {
   bildungsjahre?: number;
   status: 'aktiv' | 'entlassen';
   age: number; // calculated from geburtsdatum + last test date
+  mitarbeiter: string[];
   neuropsychologin?: string;
   aufnahmedatum?: string; // YYYY-MM-DD
   entlassdatum?: string;  // YYYY-MM-DD
-  diagnose?: string;
-  lokalisation?: string;
-  station?: string;
-  zimmer?: string;
+  diagnose?: string[];
+  /** Lokalisations-Auswahl je Diagnose (Diagnose-Text → serialisierte Gruppen-Auswahl). */
+  lokalisation?: Record<string, string>;
   createdBy?: string;
 }
 
@@ -48,6 +48,7 @@ export interface PRResult {
   label: string;
   currentPr: number | string;
   previousPr?: number | string;
+  previousPrs?: (number | string)[];
   date?: string;
   prevDate?: string;
   domain?: string;

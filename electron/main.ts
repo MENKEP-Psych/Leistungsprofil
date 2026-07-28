@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { randomBytes } from 'crypto';
@@ -48,6 +48,80 @@ function tryReadServerConfig(serverDbPath: string): Partial<AppConfig> {
 }
 
 let config = loadConfig();
+
+// ── Pending deletions (survives DB file replacement on pull) ──────────────────
+
+interface PendingDeletion {
+  type: 'result' | 'patient';
+  id: string;
+  patientId?: string; // only for results
+  deletedAt: number;  // unix seconds
+}
+
+function getPendingDeletionsPath(): string {
+  return path.join(app.getPath('userData'), 'pending-deletions.json');
+}
+
+function loadPendingDeletions(): PendingDeletion[] {
+  try {
+    return JSON.parse(fs.readFileSync(getPendingDeletionsPath(), 'utf8')) as PendingDeletion[];
+  } catch { return []; }
+}
+
+function savePendingDeletions(list: PendingDeletion[]): void {
+  fs.writeFileSync(getPendingDeletionsPath(), JSON.stringify(list), 'utf8');
+}
+
+function addPendingDeletion(entry: PendingDeletion): void {
+  const list = loadPendingDeletions();
+  if (!list.some(e => e.type === entry.type && e.id === entry.id)) {
+    list.push(entry);
+    savePendingDeletions(list);
+  }
+}
+
+function applyPendingDeletionsToDb(dbFilePath: string, deletions: PendingDeletion[]): void {
+  if (deletions.length === 0) return;
+  let localDb: import('better-sqlite3').Database | null = null;
+  try {
+    const Database = require('better-sqlite3');
+    localDb = new Database(dbFilePath);
+    for (const d of deletions) {
+      if (d.type === 'result' && d.patientId) {
+        localDb!.prepare('DELETE FROM test_results WHERE id = ? AND patient_id = ?').run(d.id, d.patientId);
+        localDb!.prepare('UPDATE patients SET updated_at = unixepoch() WHERE id = ?').run(d.patientId);
+      } else if (d.type === 'patient') {
+        localDb!.prepare('DELETE FROM patients WHERE id = ?').run(d.id);
+      }
+    }
+  } catch { /* ignore */ } finally {
+    localDb?.close();
+  }
+}
+
+function applyPendingDeletionsToServer(serverDbPath: string, deletions: PendingDeletion[]): void {
+  if (deletions.length === 0) return;
+  let serverDb: import('better-sqlite3').Database | null = null;
+  try {
+    const Database = require('better-sqlite3');
+    serverDb = new Database(serverDbPath);
+    serverDb!.pragma('foreign_keys = OFF');
+    serverDb!.pragma('busy_timeout = 10000');
+    const del = serverDb!.transaction(() => {
+      for (const d of deletions) {
+        if (d.type === 'result' && d.patientId) {
+          serverDb!.prepare('DELETE FROM test_results WHERE id = ? AND patient_id = ?').run(d.id, d.patientId);
+          serverDb!.prepare('UPDATE patients SET updated_at = unixepoch() WHERE id = ?').run(d.patientId);
+        } else if (d.type === 'patient') {
+          serverDb!.prepare('DELETE FROM patients WHERE id = ?').run(d.id);
+        }
+      }
+    });
+    del();
+  } catch { /* ignore */ } finally {
+    serverDb?.close();
+  }
+}
 
 // ── Startup state (polled by renderer to show loading screen) ─────────────────
 
@@ -113,6 +187,7 @@ function createWindow(): void {
   });
 
   mainWindow.maximize();
+  mainWindow.webContents.session.setSpellCheckerLanguages(['de', 'de-DE']);
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
@@ -183,6 +258,8 @@ function doStartup(): void {
     encryptionKey = loadOrCreateEncryptionKey(config.dbPath);
     recoveryKey = loadOrCreateRecoveryKey(config.dbPath);
     db.ensureRecoveryUser(recoveryKey);
+    // Re-apply any pending deletions (they may have been wiped by the pull).
+    db.applyPendingDeletions(loadPendingDeletions());
     startupPhase = 'ready';
   } catch (err) {
     startupError = err instanceof Error ? err.message : String(err);
@@ -229,11 +306,12 @@ ipcMain.handle('sync:pull', () => {
     pullFromServer(config.serverDbPath, config.dbPath);
     config.pullTime = Math.floor(Date.now() / 1000);
     saveConfig(config);
-    // Reopen with fresh snapshot.
+    // Reopen with fresh snapshot, then re-apply pending deletions.
     db.openDatabase(config.dbPath);
     encryptionKey = loadOrCreateEncryptionKey(config.dbPath);
     recoveryKey = loadOrCreateRecoveryKey(config.dbPath);
     db.ensureRecoveryUser(recoveryKey);
+    db.applyPendingDeletions(loadPendingDeletions());
     return { success: true };
   } catch (err) {
     // Make sure DB is open even on error.
@@ -245,6 +323,9 @@ ipcMain.handle('sync:pull', () => {
 ipcMain.handle('sync:push', () => {
   if (!config.serverDbPath) return { success: false, error: 'Kein Server-Pfad konfiguriert', newPatients: 0, updatedPatients: 0, newResults: 0, updatedResults: 0, newUsers: 0, newAuditEntries: 0 };
   const pullTime = config.pullTime ?? 0;
+  // Apply pending deletions to server before pushing so they propagate.
+  const pendingDels = loadPendingDeletions();
+  applyPendingDeletionsToServer(config.serverDbPath, pendingDels);
   const result = pushToServer(config.serverDbPath, config.dbPath, pullTime);
   if (result.success) {
     // After a successful push, pull the master DB back so the local copy reflects
@@ -255,6 +336,9 @@ ipcMain.handle('sync:push', () => {
     } finally {
       db.openDatabase(config.dbPath);
     }
+    // Re-apply pending deletions to freshly-pulled local DB, then clear them.
+    db.applyPendingDeletions(pendingDels);
+    savePendingDeletions([]);
     config.pullTime = Math.floor(Date.now() / 1000);
     saveConfig(config);
   }
@@ -286,10 +370,24 @@ ipcMain.handle('config:setPdfFolder', (_, folder: string) => {
   }
 });
 
-// Show native save dialog and write the PDF bytes to disk.
-// Returns { success: true, filePath } or { success: false, error }.
-ipcMain.handle('dialog:savePdf', async (_, filename: string, bytes: number[]) => {
-  const defaultDir = config.pdfFolder && fs.existsSync(config.pdfFolder) ? config.pdfFolder : app.getPath('documents');
+// Write PDF bytes to disk. If a default PDF folder is configured, skip the
+// dialog and save directly; otherwise show a native save dialog.
+// Returns { success: true, filePath } or { success: false, error|canceled }.
+async function writePdf(
+  filename: string,
+  buffer: Buffer,
+): Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }> {
+  const folderSet = config.pdfFolder && fs.existsSync(config.pdfFolder);
+  if (folderSet) {
+    const filePath = path.join(config.pdfFolder!, filename);
+    try {
+      fs.writeFileSync(filePath, buffer);
+      return { success: true, filePath };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+  const defaultDir = app.getPath('documents');
   const result = await dialog.showSaveDialog(mainWindow!, {
     title: 'PDF speichern',
     defaultPath: path.join(defaultDir, filename),
@@ -297,16 +395,151 @@ ipcMain.handle('dialog:savePdf', async (_, filename: string, bytes: number[]) =>
   });
   if (result.canceled || !result.filePath) return { success: false, canceled: true };
   try {
-    fs.writeFileSync(result.filePath, Buffer.from(bytes));
+    fs.writeFileSync(result.filePath, buffer);
     return { success: true, filePath: result.filePath };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// Legacy path: renderer hands over pre-rendered PDF bytes (rasterised screenshot
+// export / web fallback). Kept for non-print code paths.
+ipcMain.handle('dialog:savePdf', async (_, filename: string, bytes: number[]) =>
+  writePdf(filename, Buffer.from(bytes)),
+);
+
+// Vector PDF export: render the print-optimised profile in a hidden window and
+// capture it with webContents.printToPDF (selectable text, crisp lines, legend
+// on every page). The window fetches the patient itself via the db IPC.
+ipcMain.handle('pdf:exportProfile', async (_evt, patientId: string, filename: string) => {
+  const win = new BrowserWindow({
+    show: false,
+    width: 900,
+    height: 1400,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  try {
+    // Resolve once the print window signals its layout + fonts have settled.
+    const ready = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        ipcMain.removeListener('print:ready', onReady);
+        reject(new Error('Zeitüberschreitung beim Rendern des PDFs'));
+      }, 8000);
+      const onReady = (e: IpcMainEvent) => {
+        if (e.sender !== win.webContents) return; // ignore signals from other windows
+        clearTimeout(timeout);
+        ipcMain.removeListener('print:ready', onReady);
+        resolve();
+      };
+      ipcMain.on('print:ready', onReady);
+    });
+
+    if (isDev) {
+      await win.loadURL(`http://localhost:3000/?print=1&patient=${encodeURIComponent(patientId)}`);
+    } else {
+      await win.loadFile(path.join(__dirname, '../../dist/index.html'), {
+        query: { print: '1', patient: patientId },
+      });
+    }
+
+    await ready;
+
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true, // honour @page size + margins from print.css
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate:
+        '<div style="font-size:8px; width:100%; padding:0 10mm; text-align:right; color:#64748b; font-family: Arial, sans-serif;">Seite <span class="pageNumber"></span> / <span class="totalPages"></span></div>',
+    });
+
+    return await writePdf(filename, pdf);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    win.destroy();
+  }
+});
+
+// Open native folder picker dialog.
+ipcMain.handle('dialog:pickFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: 'Ordner auswählen',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
 });
 
 ipcMain.handle('sync:hasLocalChanges', () => {
   if (!config.pullTime) return false;
   return hasLocalChanges(config.dbPath, config.pullTime);
+});
+
+ipcMain.handle('sync:getNormsStore', () => {
+  if (!config.serverDbPath) return '';
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'normen_verifikation.json');
+    if (!fs.existsSync(filePath)) return '';
+    return fs.readFileSync(filePath, 'utf8');
+  } catch { return ''; }
+});
+
+ipcMain.handle('sync:setNormsStore', (_, data: string) => {
+  if (!config.serverDbPath) return { success: false, error: 'Kein Server-Pfad konfiguriert' };
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'normen_verifikation.json');
+    fs.writeFileSync(filePath, data, 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('textbaustein:getStore', () => {
+  if (!config.serverDbPath) return '';
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'textbausteine.json');
+    if (!fs.existsSync(filePath)) return '';
+    return fs.readFileSync(filePath, 'utf8');
+  } catch { return ''; }
+});
+
+ipcMain.handle('textbaustein:setStore', (_, data: string) => {
+  if (!config.serverDbPath) return { success: false, error: 'Kein Server-Pfad konfiguriert' };
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'textbausteine.json');
+    fs.writeFileSync(filePath, data, 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// Benachrichtigungen als gemeinsame JSON-Datei neben der Server-DB (geräteübergreifend)
+ipcMain.handle('notifications:getStore', () => {
+  if (!config.serverDbPath) return '';
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'notifications.json');
+    if (!fs.existsSync(filePath)) return '';
+    return fs.readFileSync(filePath, 'utf8');
+  } catch { return ''; }
+});
+
+ipcMain.handle('notifications:setStore', (_, data: string) => {
+  if (!config.serverDbPath) return { success: false, error: 'Kein Server-Pfad konfiguriert' };
+  try {
+    const filePath = path.join(path.dirname(config.serverDbPath), 'notifications.json');
+    fs.writeFileSync(filePath, data, 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 });
 
 // ── IPC: Database ─────────────────────────────────────────────────────────────
@@ -324,15 +557,23 @@ ipcMain.handle('db:getPatient', (_, id: string) => db.getPatient(id));
 ipcMain.handle('db:createPatient', (_, data: PatientCreatePayload) => db.createPatient(data));
 ipcMain.handle('db:updatePatient', (_, id: string, updates: PatientUpdatePayload) => db.updatePatient(id, updates));
 
+ipcMain.handle('db:deletePatient', (_, id: string) => {
+  const ok = db.deletePatient(id);
+  if (ok) addPendingDeletion({ type: 'patient', id, deletedAt: Math.floor(Date.now() / 1000) });
+  return ok;
+});
+
 ipcMain.handle('db:saveResult', (_, patientId: string, result: TestResultPayload, createdBy: string | null) =>
   db.saveResult(patientId, result, createdBy)
 );
 ipcMain.handle('db:updateResult', (_, patientId: string, result: TestResultPayload) =>
   db.updateResult(patientId, result)
 );
-ipcMain.handle('db:deleteResult', (_, patientId: string, resultId: string) =>
-  db.deleteResult(patientId, resultId)
-);
+ipcMain.handle('db:deleteResult', (_, patientId: string, resultId: string) => {
+  const ok = db.deleteResult(patientId, resultId);
+  if (ok) addPendingDeletion({ type: 'result', id: resultId, patientId, deletedAt: Math.floor(Date.now() / 1000) });
+  return ok;
+});
 
 ipcMain.handle('db:saveNote', (_, patientId: string, encryptedNote: string) =>
   db.saveNote(patientId, encryptedNote)

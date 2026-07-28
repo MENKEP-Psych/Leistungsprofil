@@ -1,41 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Notification } from '../types';
+import { isElectron } from '../lib/db-api';
 import {
-  getNotificationsForUser,
+  loadAllNotifications,
   markAsRead,
   markAllAsRead,
   deleteNotification,
   addNotification,
-  countUnread,
 } from '../lib/notifications';
 
 export function useNotifications() {
   const { currentUser } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [all, setAll] = useState<Notification[]>([]);
 
-  const reload = () => {
-    if (!currentUser) return;
-    setNotifications(getNotificationsForUser(currentUser));
-    setUnreadCount(countUnread(currentUser));
-  };
+  const reload = useCallback(async () => {
+    setAll(await loadAllNotifications());
+  }, []);
 
   useEffect(() => {
     reload();
-    window.addEventListener('notifications_updated', reload);
-    return () => window.removeEventListener('notifications_updated', reload);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
+    const onUpd = () => { reload(); };
+    window.addEventListener('notifications_updated', onUpd);
+    // Geräteübergreifend: gemeinsame Datei regelmäßig abrufen (wie Patientendaten-Polling).
+    let poll: ReturnType<typeof setInterval> | undefined;
+    if (isElectron()) poll = setInterval(reload, 30_000);
+    return () => {
+      window.removeEventListener('notifications_updated', onUpd);
+      if (poll) clearInterval(poll);
+    };
+  }, [reload]);
+
+  const notifications = currentUser
+    ? all
+        .filter(n => n.toUser === currentUser)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    : [];
+  const unreadCount = currentUser
+    ? all.filter(n => n.toUser === currentUser && !n.isRead).length
+    : 0;
 
   return {
     notifications,
     unreadCount,
-    markAsRead: (id: string) => markAsRead(id),
-    markAllAsRead: () => { if (currentUser) markAllAsRead(currentUser); },
-    deleteNotification: (id: string) => deleteNotification(id),
+    markAsRead: (id: string) => { void markAsRead(id); },
+    markAllAsRead: () => { if (currentUser) void markAllAsRead(currentUser); },
+    deleteNotification: (id: string) => { void deleteNotification(id); },
     addNotification: (to: string, message: string, patientName?: string) => {
-      if (currentUser) addNotification(currentUser, to, message, patientName);
+      if (currentUser) void addNotification(currentUser, to, message, patientName);
     },
   };
 }

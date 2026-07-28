@@ -1,234 +1,372 @@
-import React, { useState } from 'react';
-import { User, Calendar, BookOpen, Pencil, ClipboardCheck, DoorOpen, Undo2, Stethoscope, StickyNote, Building2, LayoutDashboard, History } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  StickyNote, History, Download, UserCog, Bell, LogOut,
+  LayoutDashboard, Users, Settings,
+  Upload, CheckCircle, AlertTriangle, Loader2, WifiOff,
+} from 'lucide-react';
 import { Patient } from '../types';
 import { formatDate } from '../lib/utils';
 import type { PatientListItem } from '../hooks/usePatients';
+import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+import { dbSyncPush, dbSyncHasLocalChanges, dbAddAuditEntry } from '../lib/db-api';
+import type { SyncResult } from '../lib/ipc-types';
 
-interface PatientHeaderProps {
-  patient: Patient;
-  onEdit: () => void;
-  onDischarge: () => void;
-  onUndoDischarge?: () => void;
-  generalNote?: string;
-  onSaveGeneralNote?: (note: string) => void;
-  onEditClick?: () => void;
-  onShowProfile?: () => void;
-  previousAdmissions?: PatientListItem[];
-  onSelectPreviousPatient?: (id: string) => void;
+const GESCHLECHT_LABEL: Record<string, string> = { m: 'Männlich', w: 'Weiblich', d: 'Divers' };
+const GESCHLECHT_SYMBOL: Record<string, string> = { m: '♂', w: '♀', d: '⚧' };
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
-const GESCHLECHT_LABEL: Record<string, string> = {
-  m: 'Männlich',
-  w: 'Weiblich',
-  d: 'Divers',
-};
+type SyncStatus = 'idle' | 'pushing' | 'success' | 'error';
 
-export const PatientHeader: React.FC<PatientHeaderProps> = ({ patient, onEdit, onDischarge, onUndoDischarge, generalNote = '', onSaveGeneralNote, onShowProfile, previousAdmissions = [], onSelectPreviousPatient }) => {
-  const [showDischargeConfirm, setShowDischargeConfirm] = useState(false);
-  const [showUndoConfirm, setShowUndoConfirm] = useState(false);
+interface PatientHeaderProps {
+  patient: Patient | null;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+  generalNote?: string;
+  onSaveGeneralNote?: (note: string) => void;
+  onExportPDF?: () => void;
+  onManagePatient?: () => void;
+  currentUser?: string | null;
+  onLogout?: () => void;
+  unreadCount?: number;
+  onShowNotifications?: () => void;
+  previousAdmissions?: PatientListItem[];
+  onSelectPreviousPatient?: (id: string) => void;
+  // Electron sync
+  serverPath?: string;
+  startupWarning?: string;
+  onSyncComplete?: () => void;
+}
 
-  const handleDischarge = async () => {
-    await onDischarge();
-    setShowDischargeConfirm(false);
+export const PatientHeader: React.FC<PatientHeaderProps> = ({
+  patient,
+  activeTab,
+  onTabChange,
+  generalNote = '',
+  onSaveGeneralNote,
+  onExportPDF,
+  onManagePatient,
+  currentUser,
+  onLogout,
+  unreadCount = 0,
+  onShowNotifications,
+  previousAdmissions = [],
+  onSelectPreviousPatient,
+  serverPath,
+  startupWarning,
+  onSyncComplete,
+}) => {
+  const { currentUser: authUser } = useAuth();
+
+  // ── Sync state (only active when serverPath is set) ──────────────────────
+  const [syncStatus, setSyncStatus]   = useState<SyncStatus>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
+  const [lastSync, setLastSync]       = useState<string | null>(null);
+  const [hasChanges, setHasChanges]   = useState(false);
+  const lastSyncTimeRef               = useRef<number>(0);
+
+  const checkChanges = useCallback(async () => {
+    if (!serverPath) return;
+    if (Date.now() - lastSyncTimeRef.current < 90_000) return;
+    setHasChanges(await dbSyncHasLocalChanges());
+  }, [serverPath]);
+
+  useEffect(() => {
+    checkChanges();
+    const id = setInterval(checkChanges, 30_000);
+    return () => clearInterval(id);
+  }, [checkChanges]);
+
+  const handleSync = async () => {
+    if (syncStatus === 'pushing') return;
+    setSyncStatus('pushing');
+    setSyncMessage('');
+    const result: SyncResult = await dbSyncPush();
+    if (!result.success) {
+      setSyncStatus('error');
+      setSyncMessage(result.error ?? 'Synchronisierung fehlgeschlagen');
+      return;
+    }
+    const parts: string[] = [];
+    if (result.newPatients     > 0) parts.push(`${result.newPatients} neue Pat.`);
+    if (result.updatedPatients > 0) parts.push(`${result.updatedPatients} aktual. Pat.`);
+    if (result.newResults      > 0) parts.push(`${result.newResults} neue Erg.`);
+    if (result.updatedResults  > 0) parts.push(`${result.updatedResults} aktual. Erg.`);
+    if (result.updatedResults > 0 || result.updatedPatients > 0) {
+      dbAddAuditEntry(
+        'SYNC',
+        authUser ?? 'System',
+        undefined,
+        `Synchronisierung: ${result.updatedResults} Ergebnisse / ${result.updatedPatients} Patienten aktualisiert.`,
+      );
+    }
+    setSyncStatus('success');
+    setLastSync(new Date().toISOString());
+    setSyncMessage(parts.length > 0 ? parts.join(', ') : 'Alles aktuell');
+    setHasChanges(false);
+    lastSyncTimeRef.current = Date.now();
+    onSyncComplete?.();
+    setTimeout(() => { setSyncStatus('idle'); setSyncMessage(''); lastSyncTimeRef.current = Date.now(); }, 4000);
   };
 
-  const handleUndoDischarge = async () => {
-    if (onUndoDischarge) await onUndoDischarge();
-    setShowUndoConfirm(false);
-  };
+  // ── Tab helpers ───────────────────────────────────────────────────────────
+  const isProfileTabActive = activeTab === 'profile';
+  const isPatientsActive   = activeTab === 'patients';
+  const isOptionsActive    = activeTab === 'admin';
+
+  const tabCls = (active: boolean, disabled?: boolean) => cn(
+    'flex items-center gap-1.5 px-4 h-full text-xs font-medium transition-colors whitespace-nowrap border-b-2',
+    active
+      ? 'border-slate-800 dark:border-slate-100 text-slate-900 dark:text-slate-50'
+      : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:border-slate-200 dark:hover:border-slate-600',
+    disabled && 'opacity-30 cursor-not-allowed pointer-events-none',
+  );
+
+  const Dot = () => (
+    <span className="mx-2 text-slate-200 dark:text-slate-700 select-none">·</span>
+  );
+
+  const isSyncing = syncStatus === 'pushing';
 
   return (
-    <>
-      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-5 py-2 shadow-sm sticky top-0 z-50">
-        <div className="flex items-center justify-between gap-4">
-          {/* Left: patient info */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 shrink-0">
-              <User size={17} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base font-black text-slate-800 dark:text-slate-100 leading-tight">{patient.name}</h1>
-                <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
-                  {GESCHLECHT_LABEL[patient.geschlecht] ?? patient.geschlecht}
-                </span>
-                {patient.status === 'entlassen' && (
-                  <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-600">
-                    Entlassen
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  <Calendar size={11} className="text-slate-400 dark:text-slate-500" />
-                  {formatDate(patient.geburtsdatum)} · {patient.age} J.
-                </span>
-                {patient.bildungsjahre !== undefined && (
-                  <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    <BookOpen size={11} className="text-slate-400 dark:text-slate-500" />
-                    {patient.bildungsjahre} Bdj.
-                  </span>
-                )}
-                {patient.aufnahmedatum && (
-                  <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    <DoorOpen size={11} className="text-green-500" />
-                    {formatDate(patient.aufnahmedatum)}
-                  </span>
-                )}
-                {(patient.station || patient.zimmer) && (
-                  <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    <Building2 size={11} className="text-slate-400 dark:text-slate-500" />
-                    {[patient.station, patient.zimmer].filter(Boolean).join(' · ')}
-                  </span>
-                )}
-                {previousAdmissions.length > 0 && onSelectPreviousPatient && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectPreviousPatient(previousAdmissions[0].id)}
-                    className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 px-1.5 py-0.5 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                    title={previousAdmissions.length > 1 ? `${previousAdmissions.length} frühere Aufenthalte gefunden` : 'Früherer Aufenthalt gefunden – klicken zum Öffnen'}
-                  >
-                    <History size={9} />
-                    {previousAdmissions.length === 1 ? 'Früherer Aufenthalt' : `${previousAdmissions.length}× früher`}
-                  </button>
-                )}
-                {patient.diagnose ? (
-                  <span className="flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400 font-medium">
-                    <Stethoscope size={11} />
-                    {patient.diagnose}
-                    {patient.lokalisation && (
-                      <span className="text-violet-400 dark:text-violet-500 font-normal">
-                        · {patient.lokalisation}
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={onEdit}
-                    className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-medium hover:text-violet-500 transition-colors"
-                    title="Diagnose eintragen"
-                  >
-                    <Stethoscope size={10} />
-                    <span className="italic">Diagnose eintragen</span>
-                  </button>
-                )}
-              </div>
-            </div>
+    <header className="no-print bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] sticky top-0 z-50 h-16 flex items-stretch">
+
+      {/* ── Navigation tabs ── */}
+      <div className="flex items-stretch shrink-0 pr-1">
+        <button
+          className={tabCls(isProfileTabActive, !patient)}
+          onClick={() => patient && onTabChange('profile')}
+          title={!patient ? 'Kein Patient ausgewählt' : undefined}
+        >
+          <LayoutDashboard size={12} />
+          Leistungsprofil
+        </button>
+        <button className={tabCls(isPatientsActive)} onClick={() => onTabChange('patients')}>
+          <Users size={12} />
+          Patienten
+        </button>
+        <button className={tabCls(isOptionsActive)} onClick={() => onTabChange('admin')}>
+          <Settings size={12} />
+          Optionen
+        </button>
+      </div>
+
+      <div className="w-px bg-slate-100 dark:bg-slate-800 my-3 shrink-0" />
+
+      {/* ── Patient identity ── */}
+      {patient ? (
+        <div className="flex flex-col justify-center flex-1 min-w-0 px-5 gap-1">
+
+          {/* Row 1: Name */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-[17px] font-bold tracking-tight text-slate-900 dark:text-slate-50 leading-none truncate">
+              {patient.name}
+            </span>
+            <span
+              className="text-[12px] text-slate-300 dark:text-slate-600 leading-none shrink-0 select-none"
+              title={GESCHLECHT_LABEL[patient.geschlecht]}
+            >
+              {GESCHLECHT_SYMBOL[patient.geschlecht] ?? patient.geschlecht}
+            </span>
+            {patient.status === 'entlassen' && (
+              <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-500 dark:text-rose-400 border border-rose-100 dark:border-rose-900 leading-none">
+                Entlassen
+              </span>
+            )}
+            {previousAdmissions.length > 0 && onSelectPreviousPatient && (
+              <button
+                type="button"
+                onClick={() => onSelectPreviousPatient(previousAdmissions[0].id)}
+                className="shrink-0 flex items-center gap-1 text-[10px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors leading-none border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5"
+                title="Frühere Aufenthalte anzeigen"
+              >
+                <History size={10} />
+                {previousAdmissions.length === 1 ? 'Früherer Aufenthalt' : `${previousAdmissions.length} frühere Aufenthalte`}
+              </button>
+            )}
           </div>
 
-          {/* Center: general note */}
-          {onSaveGeneralNote && (
-            <div className="no-print flex-1 flex items-center gap-2 min-w-0 max-w-lg">
-              <StickyNote size={14} className="text-amber-400 shrink-0" />
-              <input
-                type="text"
-                value={generalNote}
-                onChange={e => onSaveGeneralNote(e.target.value)}
-                placeholder="Interne Notiz (nicht im PDF): Beobachtungen, Verlauf, Empfehlungen..."
-                className="flex-1 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-slate-700 dark:text-slate-200 placeholder:text-amber-400/70 dark:placeholder:text-amber-600 focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 outline-none transition-all font-medium"
-              />
-            </div>
+          {/* Row 2: Metadata */}
+          <div className="flex items-center text-[11px] text-slate-400 dark:text-slate-500 leading-none flex-nowrap min-w-0">
+            <span className="shrink-0">{patient.age}&thinsp;J</span>
+            <Dot />
+            <span className="shrink-0">{formatDate(patient.geburtsdatum)}</span>
+            {patient.entlassdatum && (
+              <>
+                <Dot />
+                <span className="shrink-0 text-rose-400 dark:text-rose-500">
+                  Entl.&thinsp;{formatDate(patient.entlassdatum)}
+                </span>
+              </>
+            )}
+            {patient.bildungsjahre !== undefined && (
+              <>
+                <Dot />
+                <span className="shrink-0">{patient.bildungsjahre}&thinsp;Bdj.</span>
+              </>
+            )}
+            <Dot />
+            {patient.diagnose && patient.diagnose.length > 0 ? (
+              <span className="text-slate-600 dark:text-slate-300 font-medium truncate min-w-0">
+                {patient.diagnose.join('; ')}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onManagePatient}
+                className="text-rose-400 dark:text-rose-500 italic hover:text-rose-500 dark:hover:text-rose-400 transition-colors shrink-0 leading-none"
+                title="Diagnose eintragen"
+              >
+                Diagnose fehlt – eintragen
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center flex-1 px-5">
+          <span className="text-[13px] text-slate-300 dark:text-slate-600 font-medium select-none">
+            Kein Patient ausgewählt
+          </span>
+        </div>
+      )}
+
+      {/* ── Note ── */}
+      {patient && onSaveGeneralNote && (
+        <div className="flex flex-col justify-center gap-[5px] px-5 w-72 shrink-0 border-l border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-1.5 leading-none">
+            <StickyNote size={11} className="text-amber-400 dark:text-amber-500 shrink-0" />
+            <span className="text-[10px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest select-none">
+              Interne Notiz
+            </span>
+          </div>
+          <input
+            type="text"
+            value={generalNote}
+            onChange={e => onSaveGeneralNote(e.target.value)}
+            placeholder="Notiz eintragen…"
+            className={cn(
+              'w-full text-[12px] leading-none bg-transparent',
+              'text-slate-700 dark:text-slate-200',
+              'placeholder:text-slate-300 dark:placeholder:text-slate-600',
+              'border-b border-slate-200 dark:border-slate-700',
+              'focus:border-amber-400 dark:focus:border-amber-500',
+              'outline-none transition-colors pb-0.5',
+            )}
+          />
+        </div>
+      )}
+
+      {/* ── Sync (Electron only) ── */}
+      {serverPath && (
+        <div className="flex items-center gap-2 px-4 border-l border-slate-100 dark:border-slate-800 shrink-0">
+          {/* Warning indicator */}
+          {startupWarning && syncStatus === 'idle' && (
+            <span title={startupWarning} className="text-amber-500">
+              <WifiOff size={12} />
+            </span>
           )}
 
-          {/* Right: actions */}
-          <div className="no-print flex items-center gap-2 shrink-0">
-            {onShowProfile && (
-              <button
-                onClick={onShowProfile}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-xs font-bold text-white transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
-              >
-                <LayoutDashboard size={13} />
-                Leistungsprofil
-              </button>
-            )}
-            <button
-              onClick={onEdit}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 transition-all"
+          {/* Status feedback */}
+          {syncMessage && (
+            <span className={cn(
+              'text-[10px] flex items-center gap-1 shrink-0 max-w-36 truncate',
+              syncStatus === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400',
+            )}>
+              {syncStatus === 'success'
+                ? <CheckCircle size={10} className="shrink-0" />
+                : <AlertTriangle size={10} className="shrink-0" />}
+              {syncMessage}
+            </span>
+          )}
+
+          {/* Last sync time */}
+          {lastSync && syncStatus === 'idle' && !syncMessage && (
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
+              {formatTime(lastSync)}
+            </span>
+          )}
+
+          {/* Unsaved changes badge */}
+          {hasChanges && syncStatus === 'idle' && !syncMessage && (
+            <span
+              title="Sie haben ungespeicherte Änderungen. Bitte erst synchronisieren."
+              className="text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-md shrink-0 cursor-help"
             >
-              <Pencil size={13} />
-              Bearbeiten
-            </button>
+              Nicht synchronisiert
+            </span>
+          )}
 
-            {patient.status !== 'entlassen' ? (
-              <button
-                onClick={() => setShowDischargeConfirm(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-xl text-xs font-bold text-amber-700 transition-all border border-amber-200"
-              >
-                <ClipboardCheck size={13} />
-                Fall abschließen
-              </button>
-            ) : onUndoDischarge && (
-              <button
-                onClick={() => setShowUndoConfirm(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-xl text-xs font-bold text-amber-600 transition-all border border-amber-200"
-              >
-                <Undo2 size={13} />
-                Reaktivieren
-              </button>
+          {/* Sync button */}
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            title="Lokale Änderungen auf den Server übertragen"
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all shrink-0 disabled:opacity-40',
+              hasChanges
+                ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-white'
+                : 'border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800',
             )}
-          </div>
-        </div>
-      </header>
-
-      {/* Undo discharge confirmation overlay */}
-      {showUndoConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center">
-            <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center mx-auto mb-5">
-              <Undo2 size={28} className="text-amber-500" />
-            </div>
-            <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">Entlassung rückgängig?</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              <span className="font-bold text-slate-700 dark:text-slate-200">{patient.name}</span> wird wieder als aktiv markiert und erscheint in der Patientenliste.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowUndoConfirm(false)}
-                className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-700 text-sm font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={handleUndoDischarge}
-                className="flex-1 py-3 rounded-2xl bg-amber-500 text-sm font-black text-white hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
-              >
-                Reaktivieren
-              </button>
-            </div>
-          </div>
+          >
+            {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            Sync
+          </button>
         </div>
       )}
 
-      {/* Discharge confirmation overlay */}
-      {showDischargeConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center">
-            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
-              <ClipboardCheck size={28} className="text-amber-600" />
-            </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2">Fall abschließen?</h3>
-            <p className="text-sm text-slate-500 mb-6">
-              <span className="font-bold text-slate-700">{patient.name}</span> wird als entlassen markiert und
-              aus der aktiven Patientenliste entfernt. Die Daten bleiben erhalten.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDischargeConfirm(false)}
-                className="flex-1 py-3 rounded-2xl bg-slate-100 text-sm font-black text-slate-600 hover:bg-slate-200 transition-all"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={handleDischarge}
-                className="flex-1 py-3 rounded-2xl bg-amber-500 text-sm font-black text-white hover:bg-amber-600 transition-all shadow-lg shadow-amber-200"
-              >
-                Fall abschließen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+      {/* ── Actions ── */}
+      <div className="flex items-center gap-1.5 px-4 border-l border-slate-100 dark:border-slate-800 shrink-0">
+        {patient && onExportPDF && (
+          <button
+            onClick={onExportPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-white transition-all shadow-sm"
+          >
+            <Download size={12} />
+            PDF
+          </button>
+        )}
+        {patient && onManagePatient && (
+          <button
+            onClick={onManagePatient}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all"
+          >
+            <UserCog size={12} />
+            Bearbeiten
+          </button>
+        )}
+        {onShowNotifications && (
+          <button
+            onClick={onShowNotifications}
+            title="Benachrichtigungen"
+            className={cn(
+              'relative p-1.5 rounded-lg border transition-all',
+              activeTab === 'notifications'
+                ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                : 'border-transparent text-slate-400 dark:text-slate-500 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300',
+            )}
+          >
+            <Bell size={14} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] bg-rose-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+        )}
+        {currentUser && onLogout && (
+          <button
+            onClick={onLogout}
+            title={`Abmelden (${currentUser})`}
+            className="p-1.5 rounded-lg border border-transparent text-slate-300 dark:text-slate-600 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-500 dark:hover:text-rose-400 transition-all"
+          >
+            <LogOut size={14} />
+          </button>
+        )}
+      </div>
+
+    </header>
   );
 };

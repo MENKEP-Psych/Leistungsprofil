@@ -11,6 +11,10 @@ const api: ElectronAPI = {
   getPatient: (id) => ipcRenderer.invoke('db:getPatient', id),
   createPatient: (data) => ipcRenderer.invoke('db:createPatient', data),
   updatePatient: (id, updates) => ipcRenderer.invoke('db:updatePatient', id, updates),
+  deletePatient: (id) => ipcRenderer.invoke('db:deletePatient', id),
+
+  // PDF folder picker
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
 
   // Test results
   saveResult: (pid, r, by) => ipcRenderer.invoke('db:saveResult', pid, r, by),
@@ -48,11 +52,21 @@ const api: ElectronAPI = {
   syncGetServerPath: () => ipcRenderer.invoke('sync:getServerPath'),
   syncSetServerPath: (p) => ipcRenderer.invoke('sync:setServerPath', p),
   syncHasLocalChanges: () => ipcRenderer.invoke('sync:hasLocalChanges'),
+  syncGetNormsStore: () => ipcRenderer.invoke('sync:getNormsStore'),
+  syncSetNormsStore: (data: string) => ipcRenderer.invoke('sync:setNormsStore', data),
+  textbausteinGetStore: () => ipcRenderer.invoke('textbaustein:getStore'),
+  textbausteinSetStore: (data: string) => ipcRenderer.invoke('textbaustein:setStore', data),
+  notificationsGetStore: () => ipcRenderer.invoke('notifications:getStore'),
+  notificationsSetStore: (data: string) => ipcRenderer.invoke('notifications:setStore', data),
 
   // PDF
   getPdfFolder: () => ipcRenderer.invoke('config:getPdfFolder'),
   setPdfFolder: (folder) => ipcRenderer.invoke('config:setPdfFolder', folder),
   savePdf: (filename, bytes) => ipcRenderer.invoke('dialog:savePdf', filename, bytes),
+  exportProfilePdf: (patientId, filename) => ipcRenderer.invoke('pdf:exportProfile', patientId, filename),
+
+  // Print-window → main: signal that the print layout has finished rendering.
+  printReady: () => ipcRenderer.send('print:ready'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

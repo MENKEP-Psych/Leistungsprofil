@@ -3,16 +3,19 @@ import mosaikNormen from '../data/mosaik_normen.json';
 import zahlenspanneNormen from '../data/zahlenspanne_normen.json';
 import lgNormen from '../data/logisches_gedaechtnis_normen.json';
 import transformNormen from '../data/testnormen_transformation.json';
+import blockspanneNormen from '../data/blockspanne-norms.json';
+import { makeNormKey, getOverriddenPR } from './normOverrides';
 
 // ── WP → PR standard mapping (M=10, SD=3, Wechsler scale) ────────────────────
+// WP 1 and 2 → '<1' (below floor); WP 18 and 19 → '>99' (above ceiling)
 
-const WP_TO_PR: Record<number, number> = {
-  1: 1, 2: 1, 3: 1, 4: 2, 5: 5, 6: 9, 7: 16, 8: 25,
+const WP_TO_PR: Record<number, number | string> = {
+  1: '<1', 2: '<1', 3: 1, 4: 2, 5: 5, 6: 9, 7: 16, 8: 25,
   9: 37, 10: 50, 11: 63, 12: 75, 13: 84, 14: 91,
-  15: 95, 16: 98, 17: 99, 18: 99, 19: 99,
+  15: 95, 16: 98, 17: 99, 18: '>99', 19: '>99',
 };
 
-export function wpToPR(wp: number): number | null {
+export function wpToPR(wp: number): number | string | null {
   if (wp === null || wp === undefined || isNaN(wp)) {
     console.warn('wpToPR: ungültiger Eingabewert', wp);
     return null;
@@ -58,7 +61,9 @@ export function lookupZZT(times: (number | null)[]): { wp: number; pr: number } 
   const wpRow = rows.find(r => r.wp === roundedWP);
   if (!wpRow) return null;
 
-  return { wp: roundedWP, pr: wpRow.pr };
+  const key = makeNormKey('zzt', 'WP', roundedWP, 'PR');
+  const ov = getOverriddenPR(key, wpRow.pr);
+  return { wp: roundedWP, pr: ov !== undefined ? (ov as number) : wpRow.pr };
 }
 
 // ── Mosaik Test ───────────────────────────────────────────────────────────────
@@ -109,15 +114,15 @@ function parseRohwertRange(val: string | null): [number, number] | null {
 
 export function lookupMosaik(rohwert: number, age: number): { awp: number; pr: number } | null {
   const ageCol = getMosaikAgeCol(age);
-  // Iterate from best (AWP 19) downward
   for (const row of mosaikNormen.normen) {
     const cellVal = (row.rohwerte as Record<string, string | null>)[ageCol];
     const range = parseRohwertRange(cellVal);
     if (range && rohwert >= range[0] && rohwert <= range[1]) {
-      return { awp: row.awp, pr: row.pr };
+      const key = makeNormKey('mosaik', 'default', rohwert, ageCol);
+      const pr = getOverriddenPR(key, row.pr);
+      return { awp: row.awp, pr: typeof pr === 'number' ? pr : row.pr };
     }
   }
-  // Below lowest norm
   return null;
 }
 
@@ -134,23 +139,118 @@ export function lookupZahlenspanne(
   rohwert: number,
   age: number,
   direction: 'vorwaerts' | 'rueckwaerts'
-): number | null {
+): number | string | null {
   const group = getZahlenspanneAgeGroup(age);
   const prKey = direction === 'vorwaerts' ? 'pr_vorwaerts' : 'pr_rueckwaerts';
 
-  // Search from exact rohwert downward until a non-null PR is found
-  // This handles gaps in the norm table (e.g. rohwert=4 has null pr_vorwaerts
-  // but rohwert=5 has a valid value)
-  const candidates = group.normen
-    .filter(n => n.rohwert <= rohwert)
-    .sort((a, b) => b.rohwert - a.rohwert);
+  const sortedAsc = [...group.normen].sort((a, b) => a.rohwert - b.rohwert);
 
-  for (const candidate of candidates) {
-    const v = (candidate as Record<string, number | null>)[prKey];
-    if (typeof v === 'number') return v;
+  let computed: number | string | null = null;
+
+  const exact = sortedAsc.find(n => n.rohwert === rohwert);
+  if (exact) {
+    const v = (exact as Record<string, number | null>)[prKey];
+    if (typeof v === 'number') { computed = v; }
   }
 
-  return null;
+  if (computed === null) {
+    const below = sortedAsc.filter(n => n.rohwert < rohwert).reverse();
+    let lowerPR: number | null = null;
+    for (const n of below) { const v = (n as Record<string, number | null>)[prKey]; if (typeof v === 'number') { lowerPR = v; break; } }
+    computed = lowerPR !== null ? lowerPR : '< 2';
+  }
+
+  const key = makeNormKey('zahlenspanne', direction, rohwert, group.label);
+  const result = getOverriddenPR(key, computed);
+  return result !== undefined ? result as number | string | null : computed;
+}
+
+// ── Blockspanne ───────────────────────────────────────────────────────────────
+
+const BLOCKSPANNE_AGE_GROUPS = [
+  { label: '15–19 Jahre', von: 15, bis: 19 },
+  { label: '20–25 Jahre', von: 20, bis: 25 },
+  { label: '26–34 Jahre', von: 26, bis: 34 },
+  { label: '35–44 Jahre', von: 35, bis: 44 },
+  { label: '45–54 Jahre', von: 45, bis: 54 },
+  { label: '55–64 Jahre', von: 55, bis: 64 },
+  { label: '65–74 Jahre', von: 65, bis: 74 },
+];
+
+function getBlockspanneAgeLabel(age: number): string {
+  for (const g of BLOCKSPANNE_AGE_GROUPS) {
+    if (age >= g.von && age <= g.bis) return g.label;
+  }
+  if (age < BLOCKSPANNE_AGE_GROUPS[0].von) return BLOCKSPANNE_AGE_GROUPS[0].label;
+  return BLOCKSPANNE_AGE_GROUPS[BLOCKSPANNE_AGE_GROUPS.length - 1].label;
+}
+
+function parseBlockspanneRohwert(r: number | string): number {
+  if (typeof r === 'number') return r;
+  return parseFloat(r.toString().replace('≤', ''));
+}
+
+function getBlockspannePR(row: typeof blockspanneNormen.normen[0], ageLabel: string, dirKey: string): number | null {
+  const ageData = (row.pr as Record<string, Record<string, number | null>>)[ageLabel];
+  if (!ageData) return null;
+  const v = (ageData as Record<string, number | null>)[dirKey];
+  return typeof v === 'number' ? v : null;
+}
+
+export function lookupBlockspanne(
+  rohwert: number,
+  age: number,
+  direction: 'vorwaerts' | 'rueckwaerts'
+): number | string | null {
+  const ageLabel = getBlockspanneAgeLabel(age);
+  const dirKey = direction === 'vorwaerts' ? 'vorwärts' : 'rückwärts';
+
+  const sortedAsc = [...blockspanneNormen.normen]
+    .sort((a, b) => parseBlockspanneRohwert(a.rohwert) - parseBlockspanneRohwert(b.rohwert));
+
+  // Find matching row (handle "≤2" entry)
+  let exactIdx = -1;
+  for (let i = 0; i < sortedAsc.length; i++) {
+    const rw = sortedAsc[i].rohwert;
+    if (typeof rw === 'number' && rw === rohwert) { exactIdx = i; break; }
+    if (typeof rw === 'string' && rw.startsWith('≤')) {
+      const bound = parseFloat(rw.slice(1));
+      if (rohwert <= bound) { exactIdx = i; break; }
+    }
+  }
+
+  const buildRange = (idx: number) => {
+    const above = sortedAsc.slice(idx + 1);
+    const below = sortedAsc.slice(0, idx).reverse();
+    let upperPR: number | null = null;
+    for (const n of above) { const v = getBlockspannePR(n, ageLabel, dirKey); if (v !== null) { upperPR = v; break; } }
+    let lowerPR: number | null = null;
+    for (const n of below) { const v = getBlockspannePR(n, ageLabel, dirKey); if (v !== null) { lowerPR = v; break; } }
+    if (upperPR !== null && lowerPR !== null) return `${lowerPR}-${upperPR}`;
+    if (upperPR !== null) return `<${upperPR}`;
+    if (lowerPR !== null) return `>${lowerPR}`;
+    return null;
+  };
+
+  let computed: number | string | null = null;
+  if (exactIdx >= 0) {
+    const pr = getBlockspannePR(sortedAsc[exactIdx], ageLabel, dirKey);
+    computed = pr !== null ? pr : buildRange(exactIdx);
+  } else {
+    const above = sortedAsc.filter(n => parseBlockspanneRohwert(n.rohwert) > rohwert);
+    const below = sortedAsc.filter(n => parseBlockspanneRohwert(n.rohwert) < rohwert).reverse();
+    let upperPR: number | null = null;
+    for (const n of above) { const v = getBlockspannePR(n, ageLabel, dirKey); if (v !== null) { upperPR = v; break; } }
+    let lowerPR: number | null = null;
+    for (const n of below) { const v = getBlockspannePR(n, ageLabel, dirKey); if (v !== null) { lowerPR = v; break; } }
+    if (upperPR !== null && lowerPR !== null) computed = `${lowerPR}-${upperPR}`;
+    else if (upperPR !== null) computed = `<${upperPR}`;
+    else if (lowerPR !== null) computed = `>${lowerPR}`;
+  }
+
+  const key = makeNormKey('blockspanne', direction, rohwert, ageLabel);
+  const result = getOverriddenPR(key, computed);
+  return result !== undefined ? result as number | string | null : computed;
 }
 
 // ── Logisches Gedächtnis ──────────────────────────────────────────────────────
@@ -209,10 +309,24 @@ export function lookupLGWiedererkennung(rohwert: number, age: number): string | 
     const cellVal = (row.rohwerte as Record<string, string>)[ageCol];
     const range = parseRohwertRange(cellVal);
     if (range && rohwert >= range[0] && rohwert <= range[1]) {
-      return row.pr_bereich;
+      const key = makeNormKey('lg', 'wiedererk', rohwert, ageCol);
+      const result = getOverriddenPR(key, row.pr_bereich);
+      return result !== undefined ? String(result) : row.pr_bereich;
     }
   }
   return null;
+}
+
+/** Convenience: rohwert → final PR (WP→PR via wpToPR), with override check at PR level. */
+export function lookupLGPR(rohwert: number, age: number, test: 'lgI' | 'lgII'): number | string | null {
+  const ageCol = getLGAgeCol(age);
+  const wp = lookupLGWP(rohwert, age, test);
+  if (wp === null) return null;
+  const basePr = wpToPR(wp);
+  if (basePr === null) return null;
+  const key = makeNormKey('lg', test, rohwert, ageCol);
+  const result = getOverriddenPR(key, basePr);
+  return result !== undefined ? result as number | string : basePr;
 }
 
 // ── T-Wert → PR (Lienert-Transformationstabelle) ─────────────────────────────
@@ -220,7 +334,12 @@ export function lookupLGWiedererkennung(rohwert: number, age: number): string | 
 export function tWertToPR(tWert: number): number | null {
   const rounded = Math.round(tWert);
   const row = (transformNormen.normen as { T: number; PR: number }[]).find(r => r.T === rounded);
-  if (row) return row.PR;
+  if (row) {
+    // Korrekturen aus der Normtransformationstabelle (Verifizieren-Tab) berücksichtigen.
+    const key = makeNormKey('transform', 'T', rounded, 'PR');
+    const ov = getOverriddenPR(key, row.PR);
+    return ov !== undefined && ov !== null ? Number(ov) : row.PR;
+  }
   if (rounded < 20) return 0;
   if (rounded > 80) return 100;
   return null;

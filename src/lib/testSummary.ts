@@ -65,6 +65,25 @@ const PR_KEY_MAP: Record<string, string[] | undefined> = {
   tol:         ['alterkorrigiert', 'alter_bildung'],
 };
 
+// TAP-M uses PR < 31 as "below" threshold (vs standard PR < 15.87)
+const TAP_M_ALWAYS_KEYS = new Set(['alertnessM', 'alM_sd_pr']);
+const TAP_M_VERSION_GROUPS: { verField: string; keys: Set<string> }[] = [
+  { verField: 'gn_ver',  keys: new Set(['gonogo', 'gn_sd_pr', 'gn_fehler_pr', 'gn_ausl_pr']) },
+  { verField: 'fl_ver',  keys: new Set(['flexibilitaet', 'fl_sd_pr', 'fl_fehler_pr']) },
+  { verField: 'ga_ver',  keys: new Set(['geteilte', 'geteilteVisuell', 'ga_sd_pr', 'gv_sd_pr', 'g_fehler_pr', 'g_ausl_ges_pr']) },
+  { verField: 've_ver',  keys: new Set(['ve_rt_krit_pr', 've_sd_krit_pr', 've_rt_nkrit_pr', 've_sd_nkrit_pr', 've_fehler_pr', 've_ausl_krit_pr', 've_zeilen_r_pr', 've_spalten_r_pr']) },
+];
+
+function buildTapMKeys(rawValues: Record<string, unknown>): Set<string> {
+  const keys = new Set(TAP_M_ALWAYS_KEYS);
+  for (const { verField, keys: vKeys } of TAP_M_VERSION_GROUPS) {
+    if (rawValues[verField] === 'M') {
+      for (const k of vKeys) keys.add(k);
+    }
+  }
+  return keys;
+}
+
 /**
  * For a given testId and all patient results, return counts of
  * above-average / average / below-average PR values from the latest result.
@@ -80,22 +99,33 @@ export function getTestSymbolCounts(testId: string, results: TestResult[]): Symb
   const latest = testResults[0];
   const allowedKeys = PR_KEY_MAP[testId];
 
-  let prValues: (number | string)[];
-  if (allowedKeys) {
-    prValues = allowedKeys
-      .map(k => latest.percentileRanks[k])
-      .filter((v): v is number | string => v !== undefined && v !== null && v !== '' && v !== 'n/a');
-  } else {
-    prValues = getPRValues(latest);
-  }
-
-  if (prValues.length === 0) return null;
-
   const counts: SymbolCount = { above: 0, average: 0, below: 0 };
-  for (const prVal of prValues) {
-    const n = prToNumber(prVal);
-    if (n === null) continue;
-    counts[classify(n)]++;
+
+  if (testId === 'tap') {
+    const tapMKeys = buildTapMKeys((latest.rawValues ?? {}) as Record<string, unknown>);
+    for (const [k, v] of Object.entries(latest.percentileRanks)) {
+      if (v === undefined || v === null || v === '' || v === 'n/a') continue;
+      const n = prToNumber(v as number | string);
+      if (n === null) continue;
+      const threshold = tapMKeys.has(k) ? 31 : 15.87;
+      if (n > 84.13) counts.above++;
+      else if (n < threshold) counts.below++;
+      else counts.average++;
+    }
+  } else {
+    let prValues: (number | string)[];
+    if (allowedKeys) {
+      prValues = allowedKeys
+        .map(k => latest.percentileRanks[k])
+        .filter((v): v is number | string => v !== undefined && v !== null && v !== '' && v !== 'n/a');
+    } else {
+      prValues = getPRValues(latest);
+    }
+    for (const prVal of prValues) {
+      const n = prToNumber(prVal);
+      if (n === null) continue;
+      counts[classify(n)]++;
+    }
   }
 
   const total = counts.above + counts.average + counts.below;

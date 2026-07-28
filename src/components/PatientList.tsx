@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Users, UserPlus, Search, Calendar, ArrowRight, Loader2, Archive, TableProperties } from 'lucide-react';
+import { Users, UserPlus, Search, ArrowRight, Loader2, Archive, TableProperties, Star } from 'lucide-react';
 import { usePatients } from '../hooks/usePatients';
 import { useAuth } from '../context/AuthContext';
 import { fetchAllActivePatients } from '../lib/db-api';
@@ -13,20 +13,28 @@ interface PatientListProps {
   onCreatePatient: () => void;
 }
 
-const GESCHLECHT_BADGE: Record<string, { label: string; cls: string }> = {
-  m: { label: 'M', cls: 'bg-blue-100 text-blue-700' },
-  w: { label: 'W', cls: 'bg-pink-100 text-pink-700' },
-  d: { label: 'D', cls: 'bg-violet-100 text-violet-700' },
-};
+const STORAGE_KEY = 'patientList_onlyOwnDefault';
 
-function relativeTime(updatedAt: { seconds: number } | null): string {
-  if (!updatedAt?.seconds) return 'Unbekannt';
-  const diff = Date.now() / 1000 - updatedAt.seconds;
-  if (diff < 60) return 'Gerade eben';
-  if (diff < 3600) return `Vor ${Math.floor(diff / 60)} Min.`;
-  if (diff < 86400) return `Vor ${Math.floor(diff / 3600)} Std.`;
-  if (diff < 604800) return `Vor ${Math.floor(diff / 86400)} Tagen`;
-  return new Date(updatedAt.seconds * 1000).toLocaleDateString('de-DE');
+function loadOnlyOwnDefault(): boolean {
+  try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
+}
+
+function saveOnlyOwnDefault(val: boolean) {
+  try { localStorage.setItem(STORAGE_KEY, String(val)); } catch {}
+}
+
+function getLastName(fullName: string): string {
+  const parts = fullName.trim().split(' ');
+  return parts[parts.length - 1] ?? fullName;
+}
+
+function isEntlassungOverdue(entlassdatum?: string, status?: string): boolean {
+  if (!entlassdatum || status === 'entlassen') return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(entlassdatum);
+  d.setHours(0, 0, 0, 0);
+  return d < today;
 }
 
 export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCreatePatient }) => {
@@ -35,12 +43,18 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
   const [searchTerm, setSearchTerm] = useState('');
   const [showArchive, setShowArchive] = useState(false);
   const [npFilter, setNpFilter] = useState('');
-  const [onlyOwn, setOnlyOwn] = useState(false);
+  const [onlyOwn, setOnlyOwn] = useState(loadOnlyOwnDefault);
+  const [savedDefault, setSavedDefault] = useState(loadOnlyOwnDefault);
   const [isExportingTAP, setIsExportingTAP] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
   const displayedRef = useRef<typeof patients>([]);
   const focusedRef = useRef(-1);
+
+  const handleSaveDefault = () => {
+    saveOnlyOwnDefault(onlyOwn);
+    setSavedDefault(onlyOwn);
+  };
 
   const handleTapDailyPDF = async () => {
     if (!encryptionKey) return;
@@ -54,32 +68,34 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
   };
 
   const neuropsychs = [...new Set(
-    patients.map(p => p.neuropsychologin).filter((v): v is string => !!v)
+    patients.flatMap(p => p.mitarbeiter)
   )].sort();
 
   const filtered = patients.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (!npFilter || p.neuropsychologin === npFilter) &&
-    (!onlyOwn || p.neuropsychologin === currentUser)
+    (!npFilter || p.mitarbeiter.includes(npFilter)) &&
+    (!onlyOwn || p.mitarbeiter.includes(currentUser ?? ''))
   );
 
-  const active = filtered.filter(p => p.status !== 'entlassen');
+  const active = filtered
+    .filter(p => p.status !== 'entlassen')
+    .sort((a, b) => getLastName(a.name).localeCompare(getLastName(b.name), 'de'));
+
   const archived = filtered.filter(p => p.status === 'entlassen');
 
-  // Sync refs so keyboard handler always has current values
+  // Archiv-Button-Sichtbarkeit basiert auf ALLEN Patienten (unabhängig vom Filter),
+  // damit der Button nicht verschwindet wenn "Eigene" aktiv ist
+  const totalArchived = patients.filter(p => p.status === 'entlassen').length;
+
   useEffect(() => { displayedRef.current = showArchive ? [...active, ...archived] : active; });
   useEffect(() => { focusedRef.current = focusedIndex; });
-
-  // Reset focus when filters change
   useEffect(() => { setFocusedIndex(-1); }, [searchTerm, npFilter, onlyOwn, showArchive]);
 
-  // Scroll focused row into view
   useEffect(() => {
     if (focusedIndex < 0) return;
     listRef.current?.querySelector(`[data-row-index="${focusedIndex}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [focusedIndex]);
 
-  // Arrow keys + Enter navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -102,170 +118,224 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-        <Loader2 className="animate-spin mb-4" size={48} />
+        <Loader2 className="animate-spin mb-4" size={40} />
         <p className="text-sm font-medium">Lade Patientenliste...</p>
       </div>
     );
   }
 
   const PatientRow: React.FC<{ patient: typeof patients[0]; dimmed?: boolean; isFocused?: boolean; index: number }> = ({ patient, dimmed = false, isFocused = false, index }) => {
-    const badge = GESCHLECHT_BADGE[patient.geschlecht] ?? { label: '?', cls: 'bg-slate-100 text-slate-500' };
+    const parts = patient.name.trim().split(' ');
+    const lastName = parts[parts.length - 1] ?? patient.name;
+    const firstName = parts.slice(0, -1).join(' ');
+    const overdue = isEntlassungOverdue(patient.entlassdatum, patient.status);
+
+    const Dot = () => <span className="mx-1.5 text-slate-300 dark:text-slate-600 select-none">·</span>;
+
     return (
       <button
-        key={patient.id}
         data-row-index={index}
         onClick={() => onSelectPatient(patient.id)}
         className={cn(
-          'w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all group text-left',
-          dimmed && 'opacity-60',
-          isFocused && 'bg-indigo-50 dark:bg-indigo-950/40 ring-2 ring-inset ring-indigo-300 dark:ring-indigo-700'
+          'w-full flex items-center justify-between px-4 py-3.5 transition-colors group text-left',
+          'border-b border-slate-200 dark:border-slate-700 last:border-0',
+          isFocused
+            ? 'bg-slate-100 dark:bg-slate-700/60'
+            : 'hover:bg-slate-50 dark:hover:bg-slate-700/40',
+          dimmed && 'opacity-55'
         )}
       >
-        <div className="flex items-center gap-4">
-          <div className="w-11 h-11 bg-slate-100 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900 group-hover:text-indigo-600 transition-colors">
-            <Users size={22} />
+        <div className="min-w-0 flex-1">
+          {/* Row 1: Name + status badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {lastName}{firstName ? `, ${firstName}` : ''}
+            </span>
+            {patient.status === 'entlassen' && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+                Entlassen
+              </span>
+            )}
+            {overdue && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                Entlassung prüfen
+              </span>
+            )}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                {patient.name}
-              </span>
-              <span className={cn('text-[10px] font-black px-1.5 py-0.5 rounded-lg', badge.cls)}>
-                {badge.label}
-              </span>
-              {patient.status === 'entlassen' && (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-rose-100 text-rose-500">
-                  Entlassen
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-0.5">
-              <span className="flex items-center gap-1 text-xs font-medium text-slate-400 dark:text-slate-500">
-                <Calendar size={11} />
-                {formatDate(patient.geburtsdatum)}
-              </span>
-              {patient.neuropsychologin && (
-                <span className="text-xs font-medium text-indigo-400">
-                  {patient.neuropsychologin}
-                </span>
-              )}
-            </div>
+
+          {/* Row 2: Metadata */}
+          <div className="flex items-center text-[12px] text-slate-500 dark:text-slate-400 mt-0.5 flex-wrap gap-y-0.5">
+            <span>{formatDate(patient.geburtsdatum)}</span>
+            {patient.mitarbeiter.length > 0 && (
+              <>
+                <Dot />
+                <span className="font-medium capitalize">{patient.mitarbeiter.join(', ')}</span>
+              </>
+            )}
+            {patient.entlassdatum && (
+              <>
+                <Dot />
+                <span>Entl.&thinsp;{formatDate(patient.entlassdatum)}</span>
+              </>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <div className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest mb-0.5">
-              Zuletzt bearbeitet
-            </div>
-            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">{relativeTime(patient.updatedAt)}</div>
-          </div>
-          <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-300 dark:text-slate-500 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-            <ArrowRight size={18} />
-          </div>
-        </div>
+
+        <ArrowRight
+          size={14}
+          className="text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors shrink-0 ml-3"
+        />
       </button>
     );
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-200">
-            <Users size={28} />
-          </div>
-          <div>
-            <h2 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">Patientenverwaltung</h2>
-            <p className="text-sm text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">
-              {active.length} aktiv{archived.length > 0 && ` · ${archived.length} entlassen`}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleTapDailyPDF}
-            disabled={isExportingTAP}
-            title="TAP-Tagesübersicht als PDF exportieren"
-            className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-black text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
-          >
-            <TableProperties size={16} />
-            TAP-Täglich
-          </button>
-          <button
-            onClick={onCreatePatient}
-            className="flex items-center gap-2.5 px-6 py-3 bg-indigo-600 rounded-2xl text-sm font-black text-white hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
-          >
-            <UserPlus size={18} /> Neuer Patient
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4">
 
-      <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
-        {/* Search + archive toggle */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-48">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md shadow-slate-200/60 dark:shadow-none overflow-hidden">
+
+        {/* Dark header */}
+        <div className="flex items-center justify-between px-5 py-2.5 bg-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+              <Users size={13} className="text-slate-300" />
+            </div>
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Patienten</span>
+            <span className="text-[9px] font-semibold bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-md">
+              {active.length} aktiv
+            </span>
+            {archived.length > 0 && (
+              <span className="text-[9px] font-semibold bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md">
+                {archived.length} entlassen
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTapDailyPDF}
+              disabled={isExportingTAP}
+              title="TAP-Tagesübersicht als PDF exportieren"
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 bg-white/10 text-slate-200 rounded-xl text-[10px] font-semibold hover:bg-white/20 transition-colors disabled:opacity-50"
+            >
+              {isExportingTAP ? <Loader2 size={12} className="animate-spin" /> : <TableProperties size={12} />}
+              TAP-Täglich
+            </button>
+            <button
+              onClick={onCreatePatient}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-900 rounded-xl text-[10px] font-semibold hover:bg-slate-100 transition-colors"
+            >
+              <UserPlus size={12} /> Neuer Patient
+            </button>
+          </div>
+        </div>
+
+        {/* Filter bar */}
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 flex gap-2 flex-wrap items-center">
+          {/* Search */}
+          <div className="relative flex-1 min-w-40">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input
               type="text"
-              placeholder="Patient suchen (Name)..."
+              placeholder="Name suchen…"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl text-sm font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
+              className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-slate-400 transition-colors"
             />
           </div>
+
+          {/* Neuropsychologin filter */}
           {neuropsychs.length > 0 && (
             <select
               value={npFilter}
               onChange={e => setNpFilter(e.target.value)}
-              className="px-4 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-2xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-slate-600 dark:text-slate-300"
+              className="px-3 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-medium focus:outline-none focus:border-slate-400 transition-colors text-slate-600 dark:text-slate-300"
             >
-              <option value="">Alle Neuropsycholog*innen</option>
+              <option value="">Alle Mitarbeiter*innen</option>
               {neuropsychs.map(np => (
                 <option key={np} value={np}>{np}</option>
               ))}
             </select>
           )}
-          <button
-            onClick={() => setOnlyOwn(v => !v)}
-            title="Nur eigene Patienten anzeigen"
-            className={cn(
-              'flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black transition-all border',
-              onlyOwn
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200'
-                : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-slate-400'
-            )}
-          >
-            Eigene
-          </button>
 
-          {archived.length > 0 && (
+          {/* Alle / Eigene segmented control + Standard-Stern (immer sichtbar, kein Layout-Shift) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden bg-white dark:bg-slate-700">
+              <button
+                onClick={() => setOnlyOwn(false)}
+                className={cn(
+                  'px-3 py-2 text-xs font-medium transition-colors',
+                  !onlyOwn
+                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                )}
+              >
+                Alle
+              </button>
+              <button
+                onClick={() => setOnlyOwn(true)}
+                className={cn(
+                  'px-3 py-2 text-xs font-medium transition-colors border-l border-slate-200 dark:border-slate-600',
+                  onlyOwn
+                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                )}
+              >
+                Eigene
+              </button>
+            </div>
+
+            {/* Stern: immer gerendert — goldfarben wenn aktiver Filter = Standard, sonst grau klickbar */}
+            <button
+              onClick={onlyOwn !== savedDefault ? handleSaveDefault : undefined}
+              title={onlyOwn === savedDefault ? 'Dieser Filter ist der Standard' : 'Als Standard speichern'}
+              className={cn(
+                'p-1.5 rounded-lg transition-colors',
+                onlyOwn === savedDefault
+                  ? 'text-amber-400 cursor-default'
+                  : 'text-slate-300 dark:text-slate-600 hover:text-amber-400 dark:hover:text-amber-400 cursor-pointer'
+              )}
+            >
+              <Star
+                size={14}
+                fill={onlyOwn === savedDefault ? 'currentColor' : 'none'}
+                strokeWidth={onlyOwn === savedDefault ? 0 : 1.5}
+              />
+            </button>
+          </div>
+
+          {/* Archive toggle — Sichtbarkeit basiert auf totalArchived, nicht gefiltertem archived */}
+          {(totalArchived > 0 || showArchive) && (
             <button
               onClick={() => setShowArchive(v => !v)}
               className={cn(
-                'flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black transition-all border',
+                'flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border shrink-0 min-w-[120px]',
                 showArchive
-                  ? 'bg-slate-800 text-white border-slate-800'
-                  : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-slate-400'
+                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-800 border-slate-800 dark:border-slate-200'
+                  : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
               )}
             >
-              <Archive size={16} />
-              Archiv
+              <Archive size={13} />
+              {showArchive ? 'Archiv ausblenden' : `Archiv (${totalArchived})`}
             </button>
           )}
         </div>
 
         {/* Active patients */}
-        <div ref={listRef} className="divide-y divide-slate-50 dark:divide-slate-700">
+        <div ref={listRef}>
           {active.length > 0 ? (
-            active.map((p, i) => <PatientRow key={p.id} patient={p} index={i} isFocused={focusedIndex === i} />)
+            active.map((p, i) => (
+              <PatientRow key={p.id} patient={p} index={i} isFocused={focusedIndex === i} />
+            ))
           ) : (
-            <div className="py-16 text-center">
-              <div className="w-14 h-14 bg-slate-50 dark:bg-slate-700 rounded-3xl flex items-center justify-center text-slate-200 dark:text-slate-600 mx-auto mb-3">
-                <Search size={28} />
+            <div className="py-12 text-center">
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-300 dark:text-slate-600 mx-auto mb-3">
+                <Users size={20} />
               </div>
-              <h3 className="text-base font-bold text-slate-600 dark:text-slate-300">Keine aktiven Patienten</h3>
-              <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
-                {searchTerm ? 'Kein Treffer für Ihre Suche.' : 'Legen Sie einen neuen Patienten an.'}
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Keine aktiven Patienten</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                {searchTerm || onlyOwn
+                  ? 'Kein Treffer für den aktuellen Filter.'
+                  : 'Legen Sie einen neuen Patienten an.'}
               </p>
             </div>
           )}
@@ -278,17 +348,19 @@ export const PatientList: React.FC<PatientListProps> = ({ onSelectPatient, onCre
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <div className="px-5 py-3 bg-slate-100 dark:bg-slate-700 border-t border-slate-200 dark:border-slate-600 flex items-center gap-2">
-              <Archive size={14} className="text-slate-400 dark:text-slate-500" />
-              <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+            <div className="px-5 py-2 bg-slate-100 dark:bg-slate-700/60 border-t border-slate-200 dark:border-slate-700">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                 Entlassene Patienten ({archived.length})
               </span>
             </div>
-            <div className="divide-y divide-slate-50 dark:divide-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-              {archived.map((p, i) => <PatientRow key={p.id} patient={p} dimmed index={active.length + i} isFocused={focusedIndex === active.length + i} />)}
+            <div>
+              {archived.map((p, i) => (
+                <PatientRow key={p.id} patient={p} dimmed index={active.length + i} isFocused={focusedIndex === active.length + i} />
+              ))}
             </div>
           </motion.div>
         )}
+
       </div>
     </div>
   );

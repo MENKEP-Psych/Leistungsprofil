@@ -102,8 +102,7 @@ function createSchema(): void {
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_entlassdatum TEXT'); } catch { /* already exists */ }
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_diagnose TEXT'); } catch { /* already exists */ }
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_lokalisation TEXT'); } catch { /* already exists */ }
-  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_station TEXT'); } catch { /* already exists */ }
-  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_zimmer TEXT'); } catch { /* already exists */ }
+  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_mitarbeiter TEXT'); } catch { /* already exists */ }
   // Track when user credentials were last changed so push can sync password updates.
   try { getDb().exec('ALTER TABLE users ADD COLUMN updated_at INTEGER NOT NULL DEFAULT (unixepoch())'); } catch { /* already exists */ }
 }
@@ -152,9 +151,8 @@ export function loginUser(username: string, password: string): LoginResult {
 export function getPatients(): RawPatient[] {
   return (getDb().prepare(`
     SELECT id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
-           encrypted_bildungsjahre, encrypted_neuropsychologin,
+           encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
            encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose, encrypted_lokalisation,
-           encrypted_station, encrypted_zimmer,
            status, created_by, created_at, updated_at
     FROM patients
     ORDER BY updated_at DESC
@@ -164,9 +162,8 @@ export function getPatients(): RawPatient[] {
 export function getPatient(id: string): { patient: RawPatient; results: RawTestResult[]; encryptedNote: string } | null {
   const row = getDb().prepare(`
     SELECT id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
-           encrypted_bildungsjahre, encrypted_neuropsychologin,
+           encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
            encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose, encrypted_lokalisation,
-           encrypted_station, encrypted_zimmer,
            status, encrypted_general_note, created_by, created_at, updated_at
     FROM patients WHERE id = ?
   `).get(id) as Record<string, unknown> | undefined;
@@ -192,14 +189,12 @@ export function createPatient(data: PatientCreatePayload): boolean {
   try {
     getDb().prepare(`
       INSERT INTO patients (id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
-        encrypted_bildungsjahre, encrypted_neuropsychologin,
+        encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
         encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose, encrypted_lokalisation,
-        encrypted_station, encrypted_zimmer,
         status, encrypted_general_note, created_by)
       VALUES (@id, @encryptedName, @encryptedGeburtsdatum, @encryptedGeschlecht,
-        @encryptedBildungsjahre, @encryptedNeuropsychologin,
+        @encryptedBildungsjahre, @encryptedNeuropsychologin, @encryptedMitarbeiter,
         @encryptedAufnahmedatum, @encryptedEntlassdatum, @encryptedDiagnose, @encryptedLokalisation,
-        @encryptedStation, @encryptedZimmer,
         'aktiv', @encryptedGeneralNote, @createdBy)
     `).run({
       id: data.id,
@@ -208,12 +203,11 @@ export function createPatient(data: PatientCreatePayload): boolean {
       encryptedGeschlecht: data.encryptedGeschlecht,
       encryptedBildungsjahre: data.encryptedBildungsjahre ?? null,
       encryptedNeuropsychologin: data.encryptedNeuropsychologin ?? null,
+      encryptedMitarbeiter: data.encryptedMitarbeiter ?? null,
       encryptedAufnahmedatum: data.encryptedAufnahmedatum ?? null,
       encryptedEntlassdatum: data.encryptedEntlassdatum ?? null,
       encryptedDiagnose: data.encryptedDiagnose ?? null,
       encryptedLokalisation: data.encryptedLokalisation ?? null,
-      encryptedStation: data.encryptedStation ?? null,
-      encryptedZimmer: data.encryptedZimmer ?? null,
       encryptedGeneralNote: data.encryptedGeneralNote,
       createdBy: data.createdBy ?? null,
     });
@@ -232,12 +226,11 @@ export function updatePatient(id: string, updates: PatientUpdatePayload): boolea
   if (updates.encryptedGeschlecht !== undefined) { sets.push('encrypted_geschlecht = @encryptedGeschlecht'); params.encryptedGeschlecht = updates.encryptedGeschlecht; }
   if ('encryptedBildungsjahre' in updates) { sets.push('encrypted_bildungsjahre = @encryptedBildungsjahre'); params.encryptedBildungsjahre = updates.encryptedBildungsjahre ?? null; }
   if ('encryptedNeuropsychologin' in updates) { sets.push('encrypted_neuropsychologin = @encryptedNeuropsychologin'); params.encryptedNeuropsychologin = updates.encryptedNeuropsychologin ?? null; }
+  if ('encryptedMitarbeiter' in updates) { sets.push('encrypted_mitarbeiter = @encryptedMitarbeiter'); params.encryptedMitarbeiter = updates.encryptedMitarbeiter ?? null; }
   if ('encryptedAufnahmedatum' in updates) { sets.push('encrypted_aufnahmedatum = @encryptedAufnahmedatum'); params.encryptedAufnahmedatum = updates.encryptedAufnahmedatum ?? null; }
   if ('encryptedEntlassdatum' in updates) { sets.push('encrypted_entlassdatum = @encryptedEntlassdatum'); params.encryptedEntlassdatum = updates.encryptedEntlassdatum ?? null; }
   if ('encryptedDiagnose' in updates) { sets.push('encrypted_diagnose = @encryptedDiagnose'); params.encryptedDiagnose = updates.encryptedDiagnose ?? null; }
   if ('encryptedLokalisation' in updates) { sets.push('encrypted_lokalisation = @encryptedLokalisation'); params.encryptedLokalisation = updates.encryptedLokalisation ?? null; }
-  if ('encryptedStation' in updates) { sets.push('encrypted_station = @encryptedStation'); params.encryptedStation = updates.encryptedStation ?? null; }
-  if ('encryptedZimmer' in updates) { sets.push('encrypted_zimmer = @encryptedZimmer'); params.encryptedZimmer = updates.encryptedZimmer ?? null; }
   if (updates.status !== undefined) { sets.push('status = @status'); params.status = updates.status; }
 
   if (sets.length === 1) return true; // only updated_at, nothing to do
@@ -322,6 +315,25 @@ export function deleteResult(patientId: string, resultId: string): boolean {
   getDb().prepare('DELETE FROM test_results WHERE id = ? AND patient_id = ?').run(resultId, patientId);
   getDb().prepare('UPDATE patients SET updated_at = unixepoch() WHERE id = ?').run(patientId);
   return true;
+}
+
+export function deletePatient(patientId: string): boolean {
+  // ON DELETE CASCADE removes all test_results automatically.
+  getDb().prepare('DELETE FROM patients WHERE id = ?').run(patientId);
+  return true;
+}
+
+export function applyPendingDeletions(deletions: Array<{ type: string; id: string; patientId?: string }>): void {
+  for (const d of deletions) {
+    try {
+      if (d.type === 'result' && d.patientId) {
+        getDb().prepare('DELETE FROM test_results WHERE id = ? AND patient_id = ?').run(d.id, d.patientId);
+        getDb().prepare('UPDATE patients SET updated_at = unixepoch() WHERE id = ?').run(d.patientId);
+      } else if (d.type === 'patient') {
+        getDb().prepare('DELETE FROM patients WHERE id = ?').run(d.id);
+      }
+    } catch { /* ignore — record may already be gone */ }
+  }
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
@@ -414,12 +426,11 @@ function rowToRawPatient(row: Record<string, unknown>): RawPatient {
     encryptedGeschlecht: row.encrypted_geschlecht as string,
     encryptedBildungsjahre: (row.encrypted_bildungsjahre as string | null) ?? null,
     encryptedNeuropsychologin: (row.encrypted_neuropsychologin as string | null) ?? null,
+    encryptedMitarbeiter: (row.encrypted_mitarbeiter as string | null) ?? null,
     encryptedAufnahmedatum: (row.encrypted_aufnahmedatum as string | null) ?? null,
     encryptedEntlassdatum: (row.encrypted_entlassdatum as string | null) ?? null,
     encryptedDiagnose: (row.encrypted_diagnose as string | null) ?? null,
     encryptedLokalisation: (row.encrypted_lokalisation as string | null) ?? null,
-    encryptedStation: (row.encrypted_station as string | null) ?? null,
-    encryptedZimmer: (row.encrypted_zimmer as string | null) ?? null,
     status: row.status as string,
     createdBy: (row.created_by as string | null) ?? null,
     createdAt: row.created_at as number,

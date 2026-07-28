@@ -65,11 +65,12 @@ export const QuadGrid: React.FC<{
   shape: 'cross' | 'circle';
   disabled?: boolean;
 }> = ({ value, onChange, shape, disabled }) => {
-  const SIZE = 104;
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+  const SIZE = 116;
   const HALF = SIZE / 2;
-  const R = 19;
+  const R = 21;
   const LINE = '#64748b';
-  const INPUT_W = 26;
+  const INPUT_W = 30;
 
   const outerOffset = HALF / 2 - INPUT_W / 2; // ~13
   const centerOffset = HALF - INPUT_W / 2;     // ~39
@@ -82,18 +83,18 @@ export const QuadGrid: React.FC<{
     { top: centerOffset,   left:  centerOffset }, // center
   ];
 
-  // Fail buttons positioned at the outer corners of each quadrant (not for center)
+  // Fail buttons at inner corners, closer to the crosshair center
   const failBtnPos: Array<React.CSSProperties> = [
-    { top: 2,    left:  2  }, // UL
-    { top: 2,    right: 2  }, // UR
-    { bottom: 2, left:  2  }, // LL
-    { bottom: 2, right: 2  }, // LR
+    { top: outerOffset + INPUT_W - 1,  left:  outerOffset + INPUT_W - 1  }, // UL → bottom-right of UL input
+    { top: outerOffset + INPUT_W - 1,  right: outerOffset + INPUT_W - 1  }, // UR → bottom-left
+    { bottom: outerOffset + INPUT_W - 1, left: outerOffset + INPUT_W - 1 }, // LL → top-right
+    { bottom: outerOffset + INPUT_W - 1, right: outerOffset + INPUT_W - 1}, // LR → top-left
   ];
 
   const update = (i: number, v: string) => {
     if (!onChange) return;
     const next = [...value] as QuadValues;
-    next[i] = v.replace(/[^0-9]/g, '').slice(0, 2);
+    next[i] = v.replace(/[^0-9,]/g, '').slice(0, 6);
     onChange(next);
   };
 
@@ -110,12 +111,14 @@ export const QuadGrid: React.FC<{
         <React.Fragment key={i}>
           <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             value={v}
             onChange={e => update(i, e.target.value)}
+            onMouseEnter={() => i < 4 && setHoveredIdx(i)}
+            onMouseLeave={() => setHoveredIdx(null)}
             disabled={disabled || v === '/'}
             readOnly={!onChange}
-            maxLength={2}
+            maxLength={6}
             style={{
               position: 'absolute',
               ...positions[i],
@@ -127,7 +130,7 @@ export const QuadGrid: React.FC<{
                 ? '#fee2e2'
                 : (i === 4 && shape === 'cross') ? 'white' : 'transparent',
               textAlign: 'center',
-              fontSize: v === '/' ? 14 : 12,
+              fontSize: v === '/' ? 13 : 10,
               fontWeight: 700,
               fontFamily: 'monospace',
               color: v === '/' ? '#dc2626' : v ? '#dc2626' : '#94a3b8',
@@ -137,23 +140,25 @@ export const QuadGrid: React.FC<{
               zIndex: 2,
             }}
           />
-          {/* Red X fail-toggle button for each quadrant (not center) */}
+          {/* Fail toggle: only visible on hover or when already failed */}
           {i < 4 && !disabled && onChange && (
             <button
               type="button"
               onClick={() => toggleFail(i)}
-              title={v === '/' ? 'Entfernen' : 'Als Ausfall markieren (/)'}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              title={v === '/' ? 'Ausfall aufheben' : 'Als Ausfall markieren'}
               style={{
                 position: 'absolute',
                 ...failBtnPos[i],
-                width: 11,
-                height: 11,
-                background: v === '/' ? '#ef4444' : '#fca5a5',
-                color: 'white',
+                width: 10,
+                height: 10,
+                background: v === '/' ? '#fca5a5' : '#e2e8f0',
+                color: v === '/' ? '#dc2626' : '#94a3b8',
                 border: 'none',
-                borderRadius: '50%',
+                borderRadius: 2,
                 fontSize: 8,
-                fontWeight: 900,
+                fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -161,9 +166,11 @@ export const QuadGrid: React.FC<{
                 zIndex: 4,
                 padding: 0,
                 lineHeight: 1,
+                opacity: v === '/' || hoveredIdx === i ? 1 : 0,
+                transition: 'opacity 0.15s ease',
               }}
             >
-              ×
+              /
             </button>
           )}
         </React.Fragment>

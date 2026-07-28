@@ -1,4 +1,5 @@
 import vlmtNormen from '../data/vlmt_normen.json';
+import { makeNormKey, getOverriddenPR } from './normOverrides';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NormRow = Record<string, any>;
@@ -260,11 +261,21 @@ export function calculateVLMTPRPartial(age: number, inputs: VLMTPartialInputs): 
   const prs: Record<string, number | string> = {};
   for (const col of HIGHER_COLS) {
     const raw = rawMap[col];
-    if (raw != null) prs[col] = lookupPR(raw, col, normen, 'high');
+    if (raw != null) {
+      const base = lookupPR(raw, col, normen, 'high');
+      const key = makeNormKey('vlmt', col, raw, ageGroup.label);
+      const ov = getOverriddenPR(key, base);
+      prs[col] = ov !== undefined ? (ov as number | string) : base;
+    }
   }
   for (const col of LOWER_COLS) {
     const raw = rawMap[col];
-    if (raw != null) prs[col] = lookupPR(raw, col, normen, 'low');
+    if (raw != null) {
+      const base = lookupPR(raw, col, normen, 'low');
+      const key = makeNormKey('vlmt', col, raw, ageGroup.label);
+      const ov = getOverriddenPR(key, base);
+      prs[col] = ov !== undefined ? (ov as number | string) : base;
+    }
   }
 
   const nRef = ageGroup.n as Record<string, number>;
@@ -302,11 +313,19 @@ export function calculateVLMTPR(age: number, inputs: VLMTInputs): VLMTPRResult {
   const prs: Record<string, number | string> = {};
   for (const col of HIGHER_COLS) {
     const raw = rawMap[col];
-    prs[col] = raw === null ? 'n/a' : lookupPR(raw, col, normen, 'high');
+    if (raw === null) { prs[col] = 'n/a'; continue; }
+    const base = lookupPR(raw, col, normen, 'high');
+    const key = makeNormKey('vlmt', col, raw, ageGroup.label);
+    const ov = getOverriddenPR(key, base);
+    prs[col] = ov !== undefined ? (ov as number | string) : base;
   }
   for (const col of LOWER_COLS) {
     const raw = rawMap[col];
-    prs[col] = raw === null ? 'n/a' : lookupPR(raw, col, normen, 'low');
+    if (raw === null) { prs[col] = 'n/a'; continue; }
+    const base = lookupPR(raw, col, normen, 'low');
+    const key = makeNormKey('vlmt', col, raw, ageGroup.label);
+    const ov = getOverriddenPR(key, base);
+    prs[col] = ov !== undefined ? (ov as number | string) : base;
   }
 
   const nRef = ageGroup.n as Record<string, number>;

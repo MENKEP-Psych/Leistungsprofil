@@ -1,8 +1,8 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { ArrowRight, OctagonX } from 'lucide-react';
+import { OctagonX } from 'lucide-react';
 import { PRResult } from '../types';
 import { formatDate } from '../lib/utils';
+import { useProfilePrefs } from '../context/ProfilePrefsContext';
 
 export interface TextProfileResult {
   domain: string;
@@ -16,504 +16,842 @@ export interface TextProfileResult {
 interface PRProfileProps {
   results: PRResult[];
   textResults?: TextProfileResult[];
+  extraBottomContent?: React.ReactNode;
+  containerRef?: React.RefObject<HTMLDivElement>;
+  /** Suppress the in-flow legend (used by the PDF print layout, which renders
+   *  the legend once in the repeating page header instead). */
+  hideLegend?: boolean;
+  /** Force-hide the trend connectors/arrows regardless of the user preference.
+   *  Used by the PDF export, which should never render the arrows. */
+  hideTrendArrows?: boolean;
+  /** Render previous/older-measurement markers in high contrast (dark outline on
+   *  white) instead of the subtle grey/hatched on-screen style, so they stay
+   *  legible in black-and-white print. Set by the PDF export. */
+  printMode?: boolean;
 }
 
-// ── Equal-width scale ──────────────────────────────────────────────────────────
-// 7 zones, each visually equal (1/7 of total width).
-// Boundaries are the z-score based PR cutoffs.
-const PR_BOUNDS = [0, 2.28, 15.87, 30.85, 69.15, 84.1, 97.72, 100];
-const N_ZONES   = 7;
-const ZONE_W    = 100 / N_ZONES; // ≈ 14.286 %
+const LEFT_W = 300;
 
-// Map a raw PR value (0–100) → visual position (0–100%) on the equal-width scale
-function prToEqualPos(pr: number): number {
+function dotColor(pr: number | string): string {
+  const n = prToNum(pr);
+  if (n < 2)  return '#991b1b';
+  if (n < 15.87) return '#dc2626';
+  if (n > 84.13) return '#15803d';
+  return '#94a3b8';
+}
+
+const SD_BOUNDS = [0, 2, 15.87, 31, 69, 84.13, 98, 100] as const;
+const N_SEGS = SD_BOUNDS.length - 1;
+
+function prToX(pr: number): number {
   const p = Math.max(0, Math.min(100, pr));
-  for (let i = 0; i < N_ZONES; i++) {
-    const lo = PR_BOUNDS[i], hi = PR_BOUNDS[i + 1];
-    if (p <= hi || i === N_ZONES - 1) {
-      const t = hi > lo ? (p - lo) / (hi - lo) : 0;
-      return (i + Math.max(0, Math.min(1, t))) * ZONE_W;
+  for (let i = 0; i < N_SEGS; i++) {
+    if (p <= SD_BOUNDS[i + 1]) {
+      const t = (p - SD_BOUNDS[i]) / (SD_BOUNDS[i + 1] - SD_BOUNDS[i]);
+      return ((i + t) / N_SEGS) * 100;
     }
   }
   return 100;
 }
 
-// Convenience: parse a range string → [lo, hi] PR values or null
-// Handles:
-//   "15-35" / "15–35"  → [15, 35]
-//   "80->95"            → [80, 100]   (VLMT flat-zone ending at >95)
-//   ">90" / ">95"       → [90, 100]   (above-ceiling boundary)
-//   "<10" / "< 10"      → [0,  10]    (below-floor boundary)
+function prToNum(pr: number | string): number {
+  if (typeof pr === 'number') return Math.max(0, Math.min(100, pr));
+  const str = pr.toString().trim();
+
+  const mTop = str.match(/^(\d+(?:\.\d+)?)->95$/);
+  if (mTop) { const a = parseFloat(mTop[1]); return isNaN(a) ? 97 : (a + 100) / 2; }
+
+  const mGt = str.match(/^>\s*(\d+(?:\.\d+)?)$/);
+  if (mGt) { const a = parseFloat(mGt[1]); return isNaN(a) ? 99 : Math.min(100, a + 1); }
+
+  const mLt = str.match(/^<\s*(\d+(?:\.\d+)?)$/);
+  if (mLt) { const a = parseFloat(mLt[1]); return isNaN(a) ? 1 : a / 2; }
+
+  const mRange = str.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
+  if (mRange) {
+    const a = parseFloat(mRange[1]), b = parseFloat(mRange[2]);
+    return (Math.min(a, b) + Math.max(a, b)) / 2;
+  }
+
+  if (str.startsWith('≤')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 1 : v / 2; }
+  if (str.startsWith('≥')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 99 : Math.min(100, v); }
+
+  const n = parseFloat(str);
+  return isNaN(n) ? 50 : Math.max(0, Math.min(100, n));
+}
+
 function parseRangeBounds(pr: number | string): [number, number] | null {
   if (typeof pr === 'number') return null;
   const s = pr.toString().trim();
 
-  // "N->95" format (VLMT range ending at the >95 boundary)
   const mTop = s.match(/^(\d+(?:\.\d+)?)->95$/);
-  if (mTop) {
-    const a = parseFloat(mTop[1]);
-    return isNaN(a) ? null : [a, 100];
-  }
+  if (mTop) { const a = parseFloat(mTop[1]); return isNaN(a) ? null : [a, 100]; }
 
-  // ">N" — score above the ceiling of the norm table
   const mGt = s.match(/^>\s*(\d+(?:\.\d+)?)$/);
-  if (mGt) {
-    const a = parseFloat(mGt[1]);
-    return isNaN(a) ? null : [a, 100];
-  }
+  if (mGt) { const a = parseFloat(mGt[1]); return isNaN(a) ? null : [a, 100]; }
 
-  // "<N" — score below the floor of the norm table
   const mLt = s.match(/^<\s*(\d+(?:\.\d+)?)$/);
-  if (mLt) {
-    const a = parseFloat(mLt[1]);
-    return isNaN(a) ? null : [0, a];
-  }
+  if (mLt) { const a = parseFloat(mLt[1]); return isNaN(a) ? null : [0, a]; }
 
-  // Plain "N-M" or "N–M" range
   const mRange = s.match(/^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/);
   if (!mRange) return null;
   const a = parseFloat(mRange[1]), b = parseFloat(mRange[2]);
   return [Math.min(a, b), Math.max(a, b)];
 }
 
-// Numeric midpoint of any PR value (number, range string, or "<N" / ">N")
-function prToNum(pr: number | string): number {
-  if (typeof pr === 'number') return Math.max(0, Math.min(100, pr));
-  const str = pr.toString().trim();
-  const rng = parseRangeBounds(str);
-  if (rng) return (rng[0] + rng[1]) / 2;
-  if (str.startsWith('≤')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 1 : v / 2; }
-  if (str.startsWith('≥')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 99 : Math.min(100, v); }
-  if (str.startsWith('<')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 1 : v / 2; }
-  if (str.startsWith('>')) { const v = parseFloat(str.slice(1)); return isNaN(v) ? 99 : Math.min(100, v + 1); }
-  const n = parseFloat(str);
-  return isNaN(n) ? 50 : Math.max(0, Math.min(100, n));
+// Color zones matching dotColor boundaries, split at PR 2 / 16 / 84
+const COLOR_ZONE_BOUNDS = [
+  { lo: 0,  hi: 2,   color: '#991b1b' },
+  { lo: 2,  hi: 16,  color: '#dc2626' },
+  { lo: 16, hi: 84,  color: '#94a3b8' },
+  { lo: 84, hi: 100, color: '#15803d' },
+] as const;
+
+function getRangeSegments(lo: number, hi: number) {
+  const segs: { x1: number; x2: number; color: string }[] = [];
+  for (const z of COLOR_ZONE_BOUNDS) {
+    const sLo = Math.max(lo, z.lo);
+    const sHi = Math.min(hi, z.hi);
+    if (sHi > sLo) segs.push({ x1: prToX(sLo), x2: prToX(sHi), color: z.color });
+  }
+  return segs;
 }
 
-// ── Zone definitions (7 equal-width visual slots) ─────────────────────────────
-// Color families: zones 1+2 = reds, zones 3+4+5 = greens, zones 6+7 = violets
-const ZONES = [
-  { prLabel: '0–2',    prMin: 0,     prMax: 2.28,  color: '#991b1b', bg: 'rgba(153,27,27,0.22)'  }, // dark red
-  { prLabel: '2–16',   prMin: 2.28,  prMax: 15.87, color: '#dc2626', bg: 'rgba(220,38,38,0.13)'  }, // medium red
-  { prLabel: '16–31',  prMin: 15.87, prMax: 30.85, color: '#15803d', bg: 'rgba(21,128,61,0.11)'  }, // light green
-  { prLabel: '31–69',  prMin: 30.85, prMax: 69.15, color: '#166534', bg: 'rgba(22,101,52,0.20)'  }, // strong green (Normbereich)
-  { prLabel: '69–84',  prMin: 69.15, prMax: 84.1,  color: '#15803d', bg: 'rgba(21,128,61,0.11)'  }, // light green (symmetric)
-  { prLabel: '84–98',  prMin: 84.1,  prMax: 97.72, color: '#7c3aed', bg: 'rgba(124,58,237,0.13)' }, // medium violet
-  { prLabel: '98–100', prMin: 97.72, prMax: 100,   color: '#4c1d95', bg: 'rgba(76,29,149,0.22)'  }, // dark violet
-].map((z, i) => ({ ...z, visMin: i * ZONE_W, visMax: (i + 1) * ZONE_W }));
+type Seg = { x1: number; x2: number; color: string };
 
-// ── Main categories: separators at ±1 SD (PR 15.87 / 84.1) ───────────────────
-// Zone indices 0+1 = unter, 2+3+4 = durch, 5+6 = über
-const MAIN_CATS = [
-  { label: 'Unterdurchschnittlich', visMin: 0 * ZONE_W, visMax: 2 * ZONE_W, color: '#dc2626', bg: 'rgba(220,38,38,0.07)'  },
-  { label: 'Durchschnittlich',      visMin: 2 * ZONE_W, visMax: 5 * ZONE_W, color: '#166534', bg: 'rgba(22,101,52,0.06)'  },
-  { label: 'Überdurchschnittlich',  visMin: 5 * ZONE_W, visMax: 7 * ZONE_W, color: '#7c3aed', bg: 'rgba(124,58,237,0.06)' },
-];
-
-function getZone(pr: number | string) {
-  const n = prToNum(pr);
-  return ZONES.find(z => n >= z.prMin && n < z.prMax) ?? ZONES[3];
+function renderSegs(segs: Seg[], h: number, bw: number, alpha: string, zIndex = 3, hatched = false, printMode = false): React.ReactElement {
+  return React.createElement(
+    React.Fragment,
+    null,
+    ...segs.map((seg, si) => {
+      // S/W-Druck: schraffierte (= ältere) Bereiche dunkel umranden und kräftig
+      // schraffieren, damit sie nicht hellgrau verschwinden.
+      const stroke = printMode && hatched ? '#0f172a' : seg.color;
+      const bwEff  = printMode && hatched ? Math.max(bw, 1.5) : bw;
+      const hatchColor = printMode ? '#0f172a' : `${seg.color}70`;
+      return React.createElement('div', {
+        key: si,
+        className: 'absolute',
+        style: {
+          left: `${seg.x1}%`,
+          width: `${Math.max(0.5, seg.x2 - seg.x1)}%`,
+          top: '50%', transform: 'translateY(-50%)',
+          height: h,
+          borderRadius: si === 0 && si === segs.length - 1 ? h / 2
+            : si === 0 ? `${h / 2}px 0 0 ${h / 2}px`
+            : si === segs.length - 1 ? `0 ${h / 2}px ${h / 2}px 0`
+            : 0,
+          backgroundColor: hatched ? 'transparent' : `${seg.color}${alpha}`,
+          backgroundImage: hatched
+            ? `repeating-linear-gradient(45deg, ${hatchColor} 0px, ${hatchColor} 2px, transparent 2px, transparent ${printMode ? 4 : 5}px)`
+            : 'none',
+          borderTop:    `${bwEff}px solid ${stroke}`,
+          borderBottom: `${bwEff}px solid ${stroke}`,
+          borderLeft:   si === 0               ? `${bwEff}px solid ${stroke}` : 'none',
+          borderRight:  si === segs.length - 1 ? `${bwEff}px solid ${stroke}` : 'none',
+          zIndex,
+        },
+      });
+    })
+  );
 }
 
 function getMajorDomain(domain?: string): string {
   if (!domain) return 'Weitere';
-  // Extract "1. Aufmerksamkeit" from "1. Aufmerksamkeit (Geschwindigkeit)"
   const match = domain.match(/^(\d+\.\s*[^(]+)/);
   return match ? match[1].trim() : domain;
 }
 
-const LEFT_W = 290;
-
-function orderedUnique(arr: string[]): string[] {
+function orderedUnique<T>(arr: T[]): T[] {
   return arr.filter((v, i) => arr.indexOf(v) === i);
 }
 
-export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [] }) => {
-  const domainGroups = orderedUnique([
+// ---------------------------------------------------------------------------
+// Static 3-level layout configuration
+// ---------------------------------------------------------------------------
+
+interface SubsectionConfig {
+  subLabel: string;
+  testGroups: string[];
+}
+interface DomainConfig {
+  domainMatch: string;
+  label: string;
+  subsections: SubsectionConfig[];
+}
+
+const LAYOUT: DomainConfig[] = [
+  {
+    domainMatch: 'Aufmerksamkeit',
+    label: '1. Aufmerksamkeit',
+    subsections: [
+      {
+        subLabel: '1.1 Informationsverarbeitungsgeschwindigkeit',
+        testGroups: ['Zahlen-Zeichen-Test', 'Zahlen-Zeige-Test', 'Trail Making Test A', 'Trail-Making-Test A'],
+      },
+      {
+        subLabel: '1.2 Aufmerksamkeitsaktivierung',
+        testGroups: ['Alertness'],
+      },
+      {
+        subLabel: '1.3 Selektive Aufmerksamkeit',
+        testGroups: ['Go/Nogo', 'Flexibilität'],
+      },
+      {
+        subLabel: '1.4 Geteilte Aufmerksamkeit',
+        testGroups: ['Geteilte Aufmerksamkeit', 'Trail Making Test B', 'Trail-Making-Test B'],
+      },
+    ],
+  },
+  {
+    domainMatch: 'Gedächtnis',
+    label: '2. Gedächtnis',
+    subsections: [
+      {
+        subLabel: '2.1 Merkspanne',
+        testGroups: [
+          'Auditive Merkspanne', 'Zahlenspanne vorwärts', 'Zahlenspanne',
+          'Visuelle Merkspanne', 'Blockspanne vorwärts', 'Blockspanne',
+        ],
+      },
+      {
+        subLabel: '2.2 Arbeitsgedächtnis',
+        testGroups: [
+          'Zahlennachsprechen rückwärts', 'Zahlenspanne rückwärts',
+          'Blockspanne rückwärts',
+        ],
+      },
+      {
+        subLabel: '2.3 Verbale Lern- und Merkfähigkeit',
+        testGroups: ['VLMT', 'Logisches Gedächtnis'],
+      },
+      {
+        subLabel: '2.4 Figurales Gedächtnis',
+        testGroups: ['Visuelle Wiedergabe', 'WMS-IV Visuelle Wiedergabe'],
+      },
+    ],
+  },
+  {
+    domainMatch: 'Visuo',
+    label: '3. Visuo-perzeptive und visuo-konstruktive Leistungen',
+    subsections: [
+      { subLabel: '', testGroups: ['Mosaik-Test', 'Rey-Osterrieth-Figur', 'ROCFT', 'Rey-Osterrieth-Figur (ROCFT)'] },
+    ],
+  },
+  {
+    domainMatch: 'Intellektuelle',
+    label: '4. Intellektuelle Leistungen',
+    subsections: [
+      { subLabel: '', testGroups: ['LPS'] },
+    ],
+  },
+  {
+    domainMatch: 'Exekutive',
+    label: '5. Exekutive Funktionen',
+    subsections: [
+      { subLabel: '', testGroups: ['Turm von London', 'Bürotest', 'Tagesplan'] },
+    ],
+  },
+  {
+    domainMatch: 'Visuelle Exploration',
+    label: '6. Visuelle Exploration | Gesichtsfeld- und Neglectprüfung',
+    subsections: [
+      {
+        subLabel: '',
+        testGroups: ['TAP – Vis. Scanning', 'Visuelles Scanning', 'Gesichtsfeldprüfung', 'Neglectprüfung', 'Explorationsaufgaben'],
+      },
+    ],
+  },
+];
+
+function findDomainConfig(domain: string): DomainConfig | undefined {
+  return LAYOUT.find(cfg =>
+    domain.includes(cfg.domainMatch) || cfg.domainMatch.includes(domain)
+  );
+}
+
+function findSubsectionIndex(cfg: DomainConfig, tg: string): number {
+  return cfg.subsections.findIndex(sub =>
+    sub.testGroups.some(key => tg.includes(key) || key.includes(tg))
+  );
+}
+
+function findTestGroupOrder(sub: SubsectionConfig, tg: string): number {
+  return sub.testGroups.findIndex(key => tg.includes(key) || key.includes(tg));
+}
+
+// ---------------------------------------------------------------------------
+// Reference lines overlay
+// ---------------------------------------------------------------------------
+
+const ReferenceLinesOverlay: React.FC = () => (
+  <>
+    <div className="absolute pointer-events-none" style={{
+      top: '50%', left: 0, right: 0, height: 1,
+      backgroundColor: '#e2e8f0',
+      transform: 'translateY(-50%)',
+      zIndex: 0,
+    }} />
+    {[2, 31, 69, 98].map(pr => (
+      <div key={pr} className="absolute pointer-events-none" style={{
+        left: `${prToX(pr)}%`, top: 0, bottom: 0, width: 1,
+        backgroundImage: 'repeating-linear-gradient(to bottom, #cbd5e1 0px, #cbd5e1 3px, transparent 3px, transparent 6px)',
+        zIndex: 1,
+      }} />
+    ))}
+    {[15.87, 84.13].map(pr => (
+      <div key={pr} className="absolute pointer-events-none" style={{
+        left: `${prToX(pr)}%`, top: 0, bottom: 0, width: 2,
+        backgroundColor: '#94a3b8',
+        zIndex: 1,
+      }} />
+    ))}
+  </>
+);
+
+const AXIS_TICKS = [
+  { pr: 2,     sd: '−2' },
+  { pr: 15.87, sd: '−1' },
+  { pr: 31,    sd: '−½' },
+  { pr: 50,    sd: '0'  },
+  { pr: 69,    sd: '+½' },
+  { pr: 84.13, sd: '+1' },
+  { pr: 98,    sd: '+2' },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Legend — shared between the in-flow profile and the print header
+// ---------------------------------------------------------------------------
+
+const LEGEND_ZONES = [
+  { color: '#991b1b', label: 'PR < 2' },
+  { color: '#dc2626', label: 'PR 2–16' },
+  { color: '#94a3b8', label: 'PR 16–84' },
+  { color: '#15803d', label: 'PR > 84' },
+] as const;
+
+// Performance-zone legend. `className` is merged onto the flex container so
+// call sites can add their own spacing / borders (in-flow vs. print header).
+export const ProfileLegend: React.FC<{ className?: string; printMode?: boolean }> = ({ className = '', printMode = false }) => (
+  <div className={`flex flex-wrap items-center gap-x-5 gap-y-1.5 ${className}`}>
+    {LEGEND_ZONES.map(z => (
+      <div key={z.label} className="flex items-center gap-1.5">
+        <div style={{ width: 9, height: 9, borderRadius: '50%', backgroundColor: z.color }} />
+        <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">{z.label}</span>
+      </div>
+    ))}
+    <div className="flex items-center gap-1.5">
+      {/* Ring muss zum Chart-Marker passen: im S/W-Druck dunkel auf weiß. */}
+      <div style={{ width: 9, height: 9, borderRadius: '50%', border: printMode ? '2px solid #0f172a' : '2px solid #94a3b8', backgroundColor: printMode ? '#ffffff' : 'transparent' }} />
+      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">vorherige Messung</span>
+    </div>
+    <div className="flex items-center gap-1.5">
+      <div style={{ width: 16, height: 2, borderRadius: 1, backgroundColor: '#39B165' }} />
+      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">verbessert</span>
+    </div>
+    <div className="flex items-center gap-1.5">
+      <div style={{ width: 16, height: 2, borderRadius: 1, backgroundColor: '#E14747' }} />
+      <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500">verschlechtert</span>
+    </div>
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [], extraBottomContent, containerRef, hideLegend = false, hideTrendArrows = false, printMode = false }: PRProfileProps) => {
+  const { showTrendArrows } = useProfilePrefs();
+  // PDF-Export erzwingt „keine Pfeile" über hideTrendArrows, unabhängig von der Nutzer-Einstellung.
+  const showArrows = showTrendArrows && !hideTrendArrows;
+
+  const allDataDomains = orderedUnique([
     ...results.map(r => getMajorDomain(r.domain)),
     ...textResults.map(t => getMajorDomain(t.domain)),
-  ]).sort((a, b) => {
-    const na = parseInt(a), nb = parseInt(b);
-    if (!isNaN(na) && !isNaN(nb)) return na - nb;
-    if (!isNaN(na)) return -1;
-    if (!isNaN(nb)) return 1;
-    return a.localeCompare(b);
-  });
+  ]);
 
-  return (
-    <div className="pr-chart w-full bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+  const orderedDomainPairs: { cfg: DomainConfig; dataDomain: string }[] = [];
+  const unmatchedDomains: string[] = [];
 
-      {/* ── SCALE HEADER ── */}
-      <div className="flex items-end mb-2" style={{ gap: 0 }}>
-        {/* Left spacer */}
-        <div style={{ width: LEFT_W, flexShrink: 0 }} className="flex items-end justify-end pr-3 pb-1 gap-1">
-          <span className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">Vorher</span>
-          <span className="text-[8px] text-slate-300 dark:text-slate-600">›</span>
-          <span className="text-[8px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Aktuell</span>
+  for (const cfg of LAYOUT) {
+    const matched = allDataDomains.filter(d => findDomainConfig(d) === cfg);
+    for (const d of matched) orderedDomainPairs.push({ cfg, dataDomain: d });
+  }
+  for (const d of allDataDomains) {
+    if (!findDomainConfig(d)) unmatchedDomains.push(d);
+  }
+
+  // ---- Row renderers -------------------------------------------------------
+
+  const BarRow = ({ res }: { res: PRResult }) => {
+    const isAbortedNoData = res.aborted && (res.currentPr === 'n/a' || res.currentPr === undefined);
+    const isNoPrData = !res.aborted && res.currentPr === 'n/a';
+    const currPrNum = isAbortedNoData ? 50 : prToNum(res.currentPr);
+    const currColor = isAbortedNoData ? '#9ca3af' : dotColor(res.currentPr);
+    const currX     = isAbortedNoData ? 50 : prToX(currPrNum);
+
+    const prevPrNum = res.previousPr !== undefined ? prToNum(res.previousPr) : null;
+    const prevX     = prevPrNum !== null ? prToX(prevPrNum) : null;
+    const prevColor = res.previousPr !== undefined ? dotColor(res.previousPr) : null;
+
+    const extraPrevs = res.previousPrs ?? [];
+
+    const range     = !isAbortedNoData ? parseRangeBounds(res.currentPr) : null;
+    const prevRange = res.previousPr !== undefined ? parseRangeBounds(res.previousPr) : null;
+
+    const rangeSegs     = range     ? getRangeSegments(Math.max(0, range[0]),     Math.min(100, range[1]))     : null;
+    const prevRangeSegs = prevRange ? getRangeSegments(Math.max(0, prevRange[0]), Math.min(100, prevRange[1])) : null;
+
+    // Hantel-Darstellung: nur wenn beide Punktwerte vorliegen (keine PR-Bereiche, nicht abgebrochen).
+    // Richtungsfarbe: alle Werte sind Prozentränge (höher = besser) → grün = Verbesserung, rot = Verschlechterung.
+    // Kein Trendpfeil, wenn der Wert unverändert ist (vorher == aktuell).
+    const hasPair  = prevPrNum !== null && prevX !== null && !range && !prevRange && !isAbortedNoData && !isNoPrData && currPrNum !== prevPrNum;
+    const dirColor = !hasPair
+      ? '#94a3b8'
+      : currPrNum > (prevPrNum as number) ? '#39B165'
+      : currPrNum < (prevPrNum as number) ? '#E14747'
+      : '#94a3b8';
+
+    const detailsText     = !isAbortedNoData ? (res.details?.filter(Boolean).join('  ') || null) : null;
+    const prevDetailsText = !isAbortedNoData ? (res.previousDetails?.filter(Boolean).join('  ') || null) : null;
+
+    // S/W-Druck: die helle Durchschnitts-Graustufe (#94a3b8) der Werttexte abdunkeln, damit lesbar.
+    const inkPrint = (c: string) => (printMode && c === '#94a3b8' ? '#475569' : c);
+
+    return (
+      <div className="pr-row flex items-start" style={{ minHeight: 30 }}>
+        <div className="shrink-0 pl-6 pr-3 overflow-hidden" style={{ width: LEFT_W }}>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="text-[13px] text-slate-700 dark:text-slate-200 leading-tight flex-1 min-w-0 truncate"
+              title={res.note || undefined}
+            >
+              {res.label}
+              {res.tapVersion && (
+                <span className="ml-1 text-[9px] text-slate-400 dark:text-slate-500">({res.tapVersion})</span>
+              )}
+              {res.lpsKorrektur && (
+                <span className="ml-1 text-[9px] text-slate-400 dark:text-slate-500">({res.lpsKorrektur})</span>
+              )}
+            </span>
+            <div className="flex items-center gap-0.5 shrink-0">
+              {res.previousPr !== undefined && !isAbortedNoData && (
+                <>
+                  <span className="text-[10px] tabular-nums" style={{ color: inkPrint(prevColor ?? '#94a3b8'), opacity: printMode ? 1 : 0.65 }}>
+                    {res.previousPr}
+                  </span>
+                  <span className={`text-[8px] mx-0.5 ${printMode ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600'}`}>›</span>
+                </>
+              )}
+              {isAbortedNoData ? (
+                <span className="text-[10px] text-slate-400">k.A.</span>
+              ) : isNoPrData ? (
+                <span className="text-[10px] text-slate-400">–</span>
+              ) : (
+                <span className="text-[12px] font-semibold tabular-nums" style={{ color: inkPrint(currColor) }}>
+                  {res.currentPr}
+                </span>
+              )}
+            </div>
+          </div>
+          {detailsText && (
+            <div className="flex items-center gap-1 mt-0.5 leading-none">
+              {prevDetailsText && (
+                <>
+                  <span className={`text-[10px] tabular-nums ${printMode ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600'}`}>{prevDetailsText}</span>
+                  <span className={`text-[8px] mx-0.5 ${printMode ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600'}`}>›</span>
+                </>
+              )}
+              <span className={`text-[10px] tabular-nums ${printMode ? 'text-slate-700' : 'text-slate-400 dark:text-slate-500'}`}>{detailsText}</span>
+            </div>
+          )}
+          {/* PDF: Datum je Messung (vorher › aktuell) */}
+          {printMode && res.date && (
+            <div className="text-[9px] text-slate-500 tabular-nums mt-0.5 leading-none">
+              {res.prevDate && res.prevDate !== res.date
+                ? `${formatDate(res.prevDate)} › ${formatDate(res.date)}`
+                : formatDate(res.date)}
+            </div>
+          )}
+          {res.note && (
+            <p className="text-[10px] italic text-slate-400 dark:text-slate-500 mt-0.5 leading-snug whitespace-pre-wrap">
+              {res.note}
+            </p>
+          )}
         </div>
 
-        {/* Zone header */}
-        <div className="flex-1 relative" style={{ height: 64 }}>
-
-          {/* Row 1 (top 14px): Main categories with thick separators */}
-          {MAIN_CATS.map((cat, i) => (
-            <div
-              key={cat.label}
-              className="absolute flex items-center justify-center rounded-t-md overflow-hidden"
-              style={{
-                top: 0, height: 14,
-                left: `${cat.visMin}%`,
-                width: `${cat.visMax - cat.visMin}%`,
-                backgroundColor: cat.bg,
-                borderTop: `2px solid ${cat.color}55`,
-                borderLeft: i > 0 ? `3px solid ${cat.color}bb` : 'none',
-              }}
-            >
-              <span className="text-[7px] font-black uppercase tracking-widest truncate px-1" style={{ color: cat.color }}>
-                {cat.label}
+        <div className="flex-1 relative self-center" style={{ height: 28 }}>
+          {isAbortedNoData ? (
+            <div className="absolute inset-0 flex items-center px-2">
+              <OctagonX size={10} className="text-slate-400 shrink-0 mr-1.5" />
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 italic truncate">
+                {res.abortComment || 'Nicht auswertbar'}
               </span>
             </div>
-          ))}
-
-          {/* Row 2 (14–26px): Sub-zone color strip with PR range labels */}
-          {ZONES.map((z, i) => (
-            <div
-              key={z.prLabel + '-strip'}
-              className="absolute flex items-center justify-center overflow-hidden"
-              style={{
-                top: 14, height: 12,
-                left: `${z.visMin}%`,
-                width: `${z.visMax - z.visMin}%`,
-                backgroundColor: z.bg,
-                borderRight: i < N_ZONES - 1
-                  ? (i === 1 || i === 4)
-                    ? '3px solid rgba(0,0,0,0.22)'
-                    : '1px solid rgba(0,0,0,0.09)'
-                  : 'none',
-              }}
-            />
-          ))}
-
-          {/* Row 3 (26–38px): PR range labels */}
-          {ZONES.map(z => (
-            <div
-              key={z.prLabel + '-label'}
-              className="absolute flex items-center justify-center overflow-hidden"
-              style={{ top: 26, height: 12, left: `${z.visMin}%`, width: `${z.visMax - z.visMin}%` }}
-            >
-              <span className="text-[6px] font-black tabular-nums truncate px-0.5 leading-none" style={{ color: z.color }}>
-                {z.prLabel}
-              </span>
-            </div>
-          ))}
-
-          {/* Row 4 (38–56px): Tick marks at zone boundaries */}
-          {PR_BOUNDS.map((pr, i) => (
-            <div
-              key={pr}
-              className="absolute flex flex-col items-center"
-              style={{ top: 38, left: `${i * ZONE_W}%`, transform: 'translateX(-50%)' }}
-            >
-              <div className="w-px h-2.5 bg-slate-300" />
-              <span className="text-[7px] font-bold text-slate-400 mt-0.5 whitespace-nowrap tabular-nums">
-                {pr % 1 === 0 ? pr : pr.toFixed(0)}
-              </span>
-            </div>
-          ))}
+          ) : isNoPrData ? null : (
+            <>
+              <ReferenceLinesOverlay />
+              {/* Hantel-Verbindung vorher → aktuell, eingefärbt nach Richtung (grün/rot), mit Pfeil.
+                  Pro Nutzer im Optionen-Tab abschaltbar. */}
+              {hasPair && showArrows && (() => {
+                const lo = Math.min(prevX as number, currX);
+                const hi = Math.max(prevX as number, currX);
+                const toRight = currX >= (prevX as number);
+                const ARROW = 5;
+                const PAD = 14; // Abstand vom Wertepunkt-Mittelpunkt (≈ Radius + Pfeillänge) – Linie & Pfeil enden davor
+                return (
+                  <>
+                    <div className="absolute pr-trend-arrow" style={{
+                      left: toRight ? `${lo}%` : `calc(${lo}% + ${PAD}px)`,
+                      width: `max(0px, calc(${hi - lo}% - ${PAD}px))`,
+                      top: '50%', transform: 'translateY(-50%)',
+                      height: 2, backgroundColor: dirColor, borderRadius: 1, zIndex: 1,
+                    }} />
+                    <div className="absolute pr-trend-arrow" style={{
+                      left: toRight ? `calc(${currX}% - ${PAD}px)` : `calc(${currX}% + ${PAD - ARROW}px)`,
+                      top: '50%', transform: 'translateY(-50%)',
+                      width: 0, height: 0,
+                      borderTop: '3.5px solid transparent',
+                      borderBottom: '3.5px solid transparent',
+                      ...(toRight ? { borderLeft: `${ARROW}px solid ${dirColor}` } : { borderRight: `${ARROW}px solid ${dirColor}` }),
+                      zIndex: 2,
+                    }} />
+                  </>
+                );
+              })()}
+              {prevX !== null && (
+                prevRangeSegs
+                  ? renderSegs(prevRangeSegs, 5, 1.5, '20', 2, true, printMode)
+                  : React.createElement('div', { className: 'absolute', style: {
+                      left: `${prevX}%`,
+                      top: '50%', transform: 'translate(-50%, -50%)',
+                      width: printMode ? 10 : 9, height: printMode ? 10 : 9, borderRadius: '50%',
+                      // S/W-Druck: kräftiger dunkler Ring auf Weiß statt hellgrau.
+                      border: printMode ? '2.5px solid #0f172a' : '2px solid #94a3b8',
+                      backgroundColor: printMode ? '#ffffff' : 'transparent',
+                      zIndex: 2,
+                    }})
+              )}
+              {extraPrevs.map((p, i) => {
+                const epNum   = prToNum(p);
+                const epX     = prToX(epNum);
+                const epColor = dotColor(p);
+                const epRange = parseRangeBounds(p);
+                const epSegs  = epRange ? getRangeSegments(Math.max(0, epRange[0]), Math.min(100, epRange[1])) : null;
+                return epSegs
+                  ? <React.Fragment key={i}>{renderSegs(epSegs, 4, 1, '15', 2, true, printMode)}</React.Fragment>
+                  : React.createElement('div', { key: i, className: 'absolute', style: {
+                      left: `${epX}%`,
+                      top: '50%', transform: 'translate(-50%, -50%)',
+                      width: printMode ? 7 : 6, height: printMode ? 7 : 6, borderRadius: '50%',
+                      // S/W-Druck: dunkler Ring auf Weiß, volle Deckkraft – statt blassem Raster.
+                      border: printMode ? '2px solid #0f172a' : `1px solid ${epColor}`,
+                      backgroundImage: printMode ? 'none' : `repeating-linear-gradient(45deg, ${epColor}40 0px, ${epColor}40 2px, transparent 2px, transparent 5px)`,
+                      backgroundColor: printMode ? '#ffffff' : 'transparent',
+                      zIndex: 2,
+                      opacity: printMode ? 1 : 0.5,
+                    }});
+              })}
+              {rangeSegs
+                ? renderSegs(rangeSegs, 7, 2, '', 3)
+                : React.createElement('div', { className: 'absolute', style: {
+                    left: `${currX}%`,
+                    top: '50%', transform: 'translate(-50%, -50%)',
+                    width: 10, height: 10, borderRadius: '50%',
+                    backgroundColor: currColor,
+                    boxShadow: `0 1px 4px ${currColor}60`,
+                    zIndex: 3,
+                  }})
+              }
+            </>
+          )}
         </div>
       </div>
+    );
+  };
 
-      {/* ── TEST GROUPS ── */}
-      <div className="space-y-3 mt-1">
-        {domainGroups.map(group => {
-          const groupResults = results.filter(r => getMajorDomain(r.domain) === group);
-          const groupTextResults = textResults.filter(t => getMajorDomain(t.domain) === group);
+  const TextRow = ({ tr }: { tr: TextProfileResult }) => (
+    <div className="pr-row flex items-start" style={{ minHeight: 30 }}>
+      <div className="shrink-0 pr-3 py-1 overflow-hidden" style={{ width: LEFT_W }}>
+        {tr.date ? (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-none">{formatDate(tr.date)}</span>
+        ) : (
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 truncate">{tr.testGroup}</span>
+        )}
+      </div>
+      <div className="flex-1 py-1 space-y-1">
+        {tr.items.map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            {item.label && <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap min-w-[120px] leading-snug">{item.label}</span>}
+            <span className="text-[12px] text-slate-700 dark:text-slate-200 leading-snug whitespace-pre-wrap flex-1 italic">{item.text}</span>
+          </div>
+        ))}
+        {tr.note && <p className="text-[11px] italic text-slate-400 dark:text-slate-500">{tr.note}</p>}
+      </div>
+    </div>
+  );
 
-          // Unique subdomains sorted ascending by numeric prefix (1.1, 1.2, …)
-          const subdomains = orderedUnique(
-            groupResults.map(r => r.subdomain ?? '').filter(Boolean)
-          ).sort((a, b) => {
-            const num = (s: string) => parseFloat(s.match(/^[\d.]+/)?.[0] ?? '0');
-            return num(a) - num(b);
+  // ---- 3-level domain renderer with subdomain-based placement ---------------
+
+  // testGroups that mark the start of the "Exploration" section in domain 6;
+  // injectNode is rendered immediately before the first one that has data
+  const EXPLORATION_TGS = new Set(['Gesichtsfeldprüfung', 'Neglectprüfung', 'Explorationsaufgaben']);
+
+  const renderDomain = (cfg: DomainConfig, dataDomain: string, isFirst: boolean, injectNode?: React.ReactNode) => {
+    const domainResults     = results.filter(r => getMajorDomain(r.domain) === dataDomain);
+    const domainTextResults = textResults.filter(t => getMajorDomain(t.domain) === dataDomain);
+
+    // Group PRResults: subdomain label match > testGroup fallback > unassigned
+    const subResultBuckets: PRResult[][] = cfg.subsections.map((): PRResult[] => []);
+    const noGroupResults:   PRResult[]   = [];
+    const unassignedResults: PRResult[]  = [];
+
+    for (const res of domainResults) {
+      if (!res.testGroup) { noGroupResults.push(res); continue; }
+      let idx = -1;
+      if (res.subdomain) {
+        idx = cfg.subsections.findIndex(sub => sub.subLabel === res.subdomain);
+      }
+      if (idx === -1) idx = findSubsectionIndex(cfg, res.testGroup);
+      if (idx !== -1) subResultBuckets[idx].push(res);
+      else unassignedResults.push(res);
+    }
+
+    // Group TextProfileResults by testGroup matching
+    const subTextBuckets:       TextProfileResult[][] = cfg.subsections.map((): TextProfileResult[] => []);
+    const unassignedTextResults: TextProfileResult[]  = [];
+    for (const tr of domainTextResults) {
+      const idx = findSubsectionIndex(cfg, tr.testGroup);
+      if (idx !== -1) subTextBuckets[idx].push(tr);
+      else unassignedTextResults.push(tr);
+    }
+
+    let renderedSubsections = 0;
+
+    return (
+      <div key={dataDomain} className={`pr-domain ${!isFirst ? 'mt-8' : ''}`}>
+        {/* Domain heading */}
+        <div className={!isFirst ? 'border-t border-slate-300 dark:border-slate-600 pt-4 mb-3' : 'mb-3'}>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest text-center">
+            {cfg.label}
+          </h3>
+        </div>
+
+        {/* Ungrouped rows (no testGroup set) */}
+        {noGroupResults.map((res, i) => (
+          <React.Fragment key={`ng-${i}`}>{BarRow({ res })}</React.Fragment>
+        ))}
+
+        {/* Subsections */}
+        {cfg.subsections.map((sub, si) => {
+          const resInSub  = subResultBuckets[si];
+          const textInSub = subTextBuckets[si];
+          if (resInSub.length === 0 && textInSub.length === 0) return null;
+
+          const isFirstBlock = renderedSubsections === 0 && noGroupResults.length === 0;
+          renderedSubsections++;
+
+          // Unique testGroups sorted by LAYOUT config order
+          const tgsInSub = orderedUnique([
+            ...resInSub.map(r => r.testGroup ?? ''),
+            ...textInSub.map(t => t.testGroup),
+          ]).filter(Boolean);
+
+          tgsInSub.sort((a, b) => {
+            const oa = findTestGroupOrder(sub, a);
+            const ob = findTestGroupOrder(sub, b);
+            if (oa === -1 && ob === -1) return 0;
+            if (oa === -1) return 1;
+            if (ob === -1) return -1;
+            return oa - ob;
           });
-          const noSubResults = groupResults.filter(r => !r.subdomain);
-
-          // ── Single bar row renderer ──────────────────────────────────────────
-          const BarRow = ({ res, rowIdx }: { res: PRResult; rowIdx: number }) => {
-            const isAbortedNoData = res.aborted && (res.currentPr === 'n/a' || res.currentPr === undefined);
-            const currPrNum  = isAbortedNoData ? 50 : prToNum(res.currentPr);
-            const currVisPos = prToEqualPos(currPrNum);
-            const prevPrNum  = res.previousPr !== undefined ? prToNum(res.previousPr) : null;
-            const prevVisPos = prevPrNum !== null ? prToEqualPos(prevPrNum) : null;
-            const currZone   = isAbortedNoData ? ZONES[3] : getZone(res.currentPr);
-
-            return (
-              <div className={`flex items-center gap-0 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-700/40'}`}>
-
-                {/* ── LEFT INFO COLUMN ── */}
-                <div className="shrink-0 pr-3 py-1 flex gap-0 overflow-hidden" style={{ width: LEFT_W, minHeight: 26 }}>
-                  {res.testGroup && (
-                    <div className={`shrink-0 w-1 rounded-full mr-1.5 self-stretch ${isAbortedNoData ? 'bg-orange-300' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                  )}
-                  <div className="flex flex-col justify-center flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="pr-label-text text-[11px] font-bold text-slate-800 dark:text-slate-100 leading-tight flex-1 min-w-0 truncate">{res.label}</span>
-                      {res.tapVersion && (
-                        <span
-                          className="text-[8px] font-black px-1 py-px rounded shrink-0 border"
-                          style={res.tapVersion === 'M'
-                            ? { color: '#b45309', backgroundColor: '#fffbeb', borderColor: '#fde68a' }
-                            : { color: '#4f46e5', backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }}
-                          title={res.tapVersion === 'M' ? 'TAP-M Version' : 'TAP 2.3 Version'}
-                        >
-                          {res.tapVersion}
-                        </span>
-                      )}
-                      {res.lpsKorrektur && (
-                        <span
-                          className="text-[8px] font-black px-1 py-px rounded shrink-0 border"
-                          style={{ color: '#0369a1', backgroundColor: '#f0f9ff', borderColor: '#bae6fd' }}
-                          title={`Normkorrektur: ${res.lpsKorrektur}`}
-                        >
-                          {res.lpsKorrektur}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        {res.previousPr !== undefined ? (
-                          <span className="text-[8px] font-black px-1 py-px rounded tabular-nums"
-                            style={{ color: getZone(res.previousPr).color, backgroundColor: getZone(res.previousPr).bg }}>
-                            {res.previousPr}
-                          </span>
-                        ) : (
-                          <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 px-1">–</span>
-                        )}
-                        {res.prevAborted && (
-                          <span title={res.prevAbortComment || 'Vorheriger Test abgebrochen'}
-                            className="inline-flex items-center text-orange-500 opacity-70">
-                            <OctagonX size={8} />
-                          </span>
-                        )}
-                        <span className="text-slate-300 dark:text-slate-600 text-[8px]">›</span>
-                        {isAbortedNoData ? (
-                          <span className="inline-flex items-center gap-0.5 text-[8px] font-black px-1 py-px rounded bg-orange-100 text-orange-700 border border-orange-300">
-                            <OctagonX size={7} />Abgebr.
-                          </span>
-                        ) : (
-                          <span className="text-[8px] font-black px-1 py-px rounded tabular-nums"
-                            style={{ color: currZone.color, backgroundColor: currZone.bg }}>
-                            {res.currentPr}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {(res.date || res.prevDate) && (
-                      <div className="flex items-center gap-1 mt-px">
-                        {res.prevDate && <span className="text-[9px] text-slate-400">{formatDate(res.prevDate)}</span>}
-                        {res.prevDate && res.date && <ArrowRight size={7} className="text-slate-300 shrink-0" />}
-                        {res.date && <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400">{formatDate(res.date)}</span>}
-                      </div>
-                    )}
-                    {res.testGroup && (
-                      <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{res.testGroup}</span>
-                    )}
-                    {res.note && (
-                      <div className="text-[9px] italic text-slate-400 whitespace-pre-wrap mt-px">{res.note}</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── BAR AREA ── */}
-                <div className="pr-bar-row flex-1 relative" style={{ height: 26 }}>
-                  {isAbortedNoData ? (
-                    <div className="absolute inset-0 rounded-xl flex items-center px-3 border border-orange-200 dark:border-orange-900 bg-orange-50/70 dark:bg-orange-950/30">
-                      <OctagonX size={10} className="text-orange-400 shrink-0 mr-1.5" />
-                      <span className="text-[10px] text-orange-700 dark:text-orange-300 italic truncate">
-                        {res.abortComment || 'Test abgebrochen / unvollständig'}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="absolute inset-0 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600">
-                        {ZONES.map(z => (
-                          <div key={z.prLabel} className="absolute inset-y-0"
-                            style={{ left: `${z.visMin}%`, width: `${z.visMax - z.visMin}%`, backgroundColor: z.bg }} />
-                        ))}
-                        {ZONES.slice(1).map((z, i) => (
-                          <div key={z.prLabel + '-div'}
-                            className={`absolute inset-y-0 ${(i === 1 || i === 4) ? 'pr-zone-div-major' : 'pr-zone-div-minor'}`}
-                            style={{
-                              left: `${z.visMin}%`,
-                              width: (i === 1 || i === 4) ? 2 : 1,
-                              backgroundColor: (i === 1 || i === 4) ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.08)',
-                            }} />
-                        ))}
-                      </div>
-
-                      {/* Current PR – range or point */}
-                      {(() => {
-                        const range = parseRangeBounds(res.currentPr);
-                        if (range) {
-                          const [lo, hi] = range;
-                          const segments = ZONES
-                            .filter(z => z.prMax > lo && z.prMin < hi)
-                            .map((z, si, arr) => ({
-                              vL: prToEqualPos(Math.max(lo, z.prMin)),
-                              vR: prToEqualPos(Math.min(hi, z.prMax)),
-                              color: z.color, first: si === 0, last: si === arr.length - 1,
-                            }));
-                          return (
-                            <>
-                              {segments.map((seg, si) => (
-                                <motion.div key={si}
-                                  initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: 1 }}
-                                  transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-                                  className="absolute z-30"
-                                  style={{
-                                    left: `${seg.vL}%`, width: `${Math.max(seg.vR - seg.vL, 0.3)}%`,
-                                    top: 3, bottom: 3, transformOrigin: 'left center',
-                                    backgroundColor: seg.color,
-                                    borderTop: `2px solid ${seg.color}`, borderBottom: `2px solid ${seg.color}`,
-                                    borderLeft: seg.first ? `2px solid ${seg.color}` : 'none',
-                                    borderRight: seg.last ? `2px solid ${seg.color}` : 'none',
-                                    borderRadius: seg.first && seg.last ? 3 : seg.first ? '3px 0 0 3px' : seg.last ? '0 3px 3px 0' : 0,
-                                  }} />
-                              ))}
-                            </>
-                          );
-                        }
-                        return (
-                          <motion.div
-                            initial={{ scaleY: 0, opacity: 0 }} animate={{ scaleY: 1, opacity: 1 }}
-                            transition={{ type: 'spring', bounce: 0.3, duration: 0.4 }}
-                            className="absolute z-30"
-                            style={{
-                              left: `${currVisPos}%`, top: 3, bottom: 3,
-                              transform: 'translateX(-50%)', transformOrigin: 'center',
-                              width: 5, borderRadius: 2, backgroundColor: currZone.color,
-                              boxShadow: `0 0 6px ${currZone.color}60`,
-                            }} />
-                        );
-                      })()}
-
-                      {/* Previous PR – outlined */}
-                      {prevVisPos !== null && (() => {
-                        const prevRange = res.previousPr !== undefined ? parseRangeBounds(res.previousPr) : null;
-                        const prevZoneColor = getZone(res.previousPr!).color;
-                        if (prevRange) {
-                          const vL = prToEqualPos(prevRange[0]), vR = prToEqualPos(prevRange[1]);
-                          return (
-                            <div style={{
-                              position: 'absolute', left: `${vL}%`, width: `${Math.max(vR - vL, 0.3)}%`,
-                              top: 4, bottom: 4, backgroundColor: 'white',
-                              border: `2px solid ${prevZoneColor}`, borderRadius: 3, zIndex: 20,
-                            }} />
-                          );
-                        }
-                        return (
-                          <div style={{
-                            position: 'absolute', left: `${prevVisPos}%`, top: 4, bottom: 4,
-                            transform: 'translateX(-50%)', width: 7, borderRadius: 2,
-                            backgroundColor: 'white', border: `2px solid ${prevZoneColor}`, zIndex: 20,
-                          }} />
-                        );
-                      })()}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          };
-
-          // ── Text result row renderer ──────────────────────────────────────────
-          const TextRow = ({ tr, rowIdx }: { tr: TextProfileResult; rowIdx: number }) => (
-            <div className={`flex items-stretch gap-0 ${rowIdx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-700/40'}`}>
-              <div className="shrink-0 pr-3 py-2 flex gap-0 overflow-hidden" style={{ width: LEFT_W }}>
-                <div className="shrink-0 w-1 rounded-full mr-1.5 self-stretch bg-slate-300 dark:bg-slate-600" />
-                <div className="flex flex-col justify-center flex-1 min-w-0">
-                  <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100 leading-tight">{tr.testGroup}</span>
-                  {(tr.date || tr.examiner) && (
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-px">
-                      {tr.date && formatDate(tr.date)}{tr.examiner && ` · ${tr.examiner}`}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 py-2 pr-2 pl-3 space-y-2">
-                {tr.items.map((item, ii) => (
-                  <div key={ii}>
-                    <div className="text-[8px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">{item.label}</div>
-                    <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-snug whitespace-pre-wrap">{item.text}</p>
-                  </div>
-                ))}
-                {tr.note && <p className="text-[10px] italic text-slate-400 dark:text-slate-500">{tr.note}</p>}
-              </div>
-            </div>
-          );
 
           return (
-            <div key={group}>
-              {/* Major domain header */}
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="pr-group-badge text-[9px] font-black text-indigo-900 dark:text-indigo-200 uppercase tracking-[0.2em] px-3 py-1 bg-indigo-50 dark:bg-indigo-950 rounded-lg border border-indigo-100 dark:border-indigo-900 whitespace-nowrap">
-                  {group}
-                </h3>
-                <div className="h-px flex-1 bg-gradient-to-r from-indigo-100 to-transparent" />
-              </div>
+            <div key={`sub-${si}`} className={!isFirstBlock ? 'mt-3' : ''}>
+              {sub.subLabel && (
+                <div className="flex items-center gap-2 mb-1 mt-2">
+                  {/* Abschnitts-Überschrift (z. B. „2.4 Figurales Gedächtnis") fett, linksbündig */}
+                  <span className="text-[10px] font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider whitespace-nowrap">
+                    {sub.subLabel}
+                  </span>
+                  <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />
+                </div>
+              )}
 
-              <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700">
-                {/* Items without subdomain */}
-                {noSubResults.map((res, i) => (
-                  <React.Fragment key={`${res.label}-${i}`}>{BarRow({ res, rowIdx: i })}</React.Fragment>
-                ))}
-
-                {/* Items grouped by subdomain */}
-                {subdomains.map(sub => {
-                  const subItems = groupResults.filter(r => r.subdomain === sub);
+              {(() => {
+                // index of the first exploration testGroup — injectNode goes before it
+                const injectIdx = injectNode
+                  ? tgsInSub.findIndex(tg => EXPLORATION_TGS.has(tg))
+                  : -1;
+                return tgsInSub.map((tg, tgi) => {
+                  const tgResults     = resInSub.filter(r => r.testGroup === tg);
+                  const tgTextResults = textInSub.filter(t => t.testGroup === tg);
+                  // Show testGroup label only when no subsection heading exists,
+                  // or explicitly for VLMT and LPS which need labeling within named subsections
+                  const showThisLabel = !sub.subLabel || tg === 'VLMT' || tg.includes('LPS') || tg.includes('Logisches Gedächtnis') || tg.includes('Visuelle Wiedergabe');
                   return (
-                    <React.Fragment key={sub}>
-                      {/* Subdomain header row */}
-                      <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-700/60 border-y border-slate-100 dark:border-slate-700">
-                        <span className="text-[8px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.15em] whitespace-nowrap">{sub}</span>
-                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-600" />
+                    <React.Fragment key={tg}>
+                      {tgi === injectIdx && injectNode}
+                      {/* Größere Lücke vor jedem benannten Testverfahren (z. B. VLMT ↔ Logisches Gedächtnis) */}
+                      <div className={tgi > 0 ? (showThisLabel ? 'mt-4' : 'mt-1') : ''}>
+                        {showThisLabel && (
+                          <div className="flex items-center gap-2 mb-0.5 pl-2">
+                            {/* Testverfahren-Name fett ("dick gedruckt"), eingerückt unter den Abschnitt */}
+                            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-200 uppercase tracking-wider whitespace-nowrap">
+                              {tg}
+                            </span>
+                            {tg !== 'VLMT' && <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />}
+                          </div>
+                        )}
+                        {tgResults.map((res, i) => (
+                          <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
+                        ))}
+                        {tgTextResults.map((tr, i) => (
+                          <React.Fragment key={i}>{TextRow({ tr })}</React.Fragment>
+                        ))}
                       </div>
-                      {subItems.map((res, i) => (
-                        <React.Fragment key={`${sub}-${res.label}-${i}`}>{BarRow({ res, rowIdx: i })}</React.Fragment>
-                      ))}
                     </React.Fragment>
                   );
-                })}
-
-                {/* Text results (Bürotest, Tagesplan) */}
-                {groupTextResults.map((tr, ti) => (
-                  <React.Fragment key={`${tr.testGroup}-${ti}`}>{TextRow({ tr, rowIdx: noSubResults.length + groupResults.filter(r => r.subdomain).length + ti })}</React.Fragment>
-                ))}
-              </div>
+                });
+              })()}
             </div>
           );
         })}
+
+        {/* Unassigned testGroups (not in LAYOUT config for this domain) */}
+        {(unassignedResults.length > 0 || unassignedTextResults.length > 0) && (
+          <div className="mt-3">
+            {orderedUnique([
+              ...unassignedResults.map(r => r.testGroup ?? ''),
+              ...unassignedTextResults.map(t => t.testGroup),
+            ]).filter(Boolean).map((tg, tgi) => {
+              const tgResults = unassignedResults.filter(r => r.testGroup === tg);
+              const tgText    = unassignedTextResults.filter(t => t.testGroup === tg);
+              return (
+                <div key={tg} className={tgi > 0 ? 'mt-1' : ''}>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">{tg}</span>
+                    <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />
+                  </div>
+                  {tgResults.map((res, i) => <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>)}
+                  {tgText.map((tr, i)    => <React.Fragment key={i}>{TextRow({ tr })}</React.Fragment>)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ---- Root render ---------------------------------------------------------
+
+  // Split domains: main (1–5) rendered before the axis, exploration (6) after
+  const mainPairs = orderedDomainPairs.filter(({ cfg }) => cfg.domainMatch !== 'Visuelle Exploration');
+  const explorationPairs = orderedDomainPairs.filter(({ cfg }) => cfg.domainMatch === 'Visuelle Exploration');
+  const hasMainContent = mainPairs.length > 0 || unmatchedDomains.length > 0;
+
+  return (
+    <div ref={containerRef} className="pr-chart w-full bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md shadow-slate-200/60 dark:shadow-none">
+
+      {/* Spaltenkopf: kennzeichnet die Werte hinter dem Testnamen als Prozentränge (PR) */}
+      {hasMainContent && (
+        <div className="flex items-center mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-700">
+          <div className="shrink-0 pr-3 flex items-baseline justify-between" style={{ width: LEFT_W }}>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Test</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">Prozentrang (PR)</span>
+          </div>
+          <div className="flex-1" />
+        </div>
+      )}
+
+      {/* Main domains (1–5) */}
+      {mainPairs.map(({ cfg, dataDomain }, di) =>
+        renderDomain(cfg, dataDomain, di === 0)
+      )}
+
+      {/* Fallback: unmatched domains (custom tests etc.) — rendered before axis */}
+      {unmatchedDomains.map((domain, di) => {
+        const domainResults     = results.filter(r => getMajorDomain(r.domain) === domain);
+        const domainTextResults = textResults.filter(t => getMajorDomain(t.domain) === domain);
+        const allTgs = orderedUnique([
+          ...domainResults.map(r => r.testGroup ?? ''),
+          ...domainTextResults.map(t => t.testGroup),
+        ]);
+        const noGroupResults = domainResults.filter(r => !r.testGroup);
+        const isFirst = mainPairs.length === 0 && di === 0;
+        return (
+          <div key={domain} className={!isFirst ? 'mt-8' : ''}>
+            <div className={!isFirst ? 'border-t border-slate-300 dark:border-slate-600 pt-4 mb-3' : 'mb-3'}>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest text-center">{domain}</h3>
+            </div>
+            {noGroupResults.map((res, i) => (
+              <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
+            ))}
+            {allTgs.filter(Boolean).map((tg, tgi) => {
+              const tgResults     = domainResults.filter(r => r.testGroup === tg);
+              const tgTextResults = domainTextResults.filter(t => t.testGroup === tg);
+              return (
+                <div key={tg} className={tgi > 0 || noGroupResults.length > 0 ? 'mt-3' : ''}>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">{tg}</span>
+                    <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />
+                  </div>
+                  {tgResults.map((res, i) => (
+                    <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
+                  ))}
+                  {tgTextResults.map((tr, i) => (
+                    <React.Fragment key={i}>{TextRow({ tr })}</React.Fragment>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {/* Bottom axis — after domains 1–5, before domain 6 */}
+      <div className="mt-4 flex">
+        <div style={{ width: LEFT_W, flexShrink: 0 }} />
+        <div className="flex-1 relative" style={{ height: 26 }}>
+          <div className="absolute" style={{ left: 0, right: 0, top: 0, height: 1, backgroundColor: '#e2e8f0' }} />
+          {AXIS_TICKS.map(({ pr, sd }) => (
+            <div key={pr} className="absolute flex flex-col items-center" style={{ left: `${prToX(pr)}%`, transform: 'translateX(-50%)', top: 0 }}>
+              <div style={{ width: 1, height: 4, backgroundColor: '#94a3b8' }} />
+              <span className="text-[8px] text-slate-400 dark:text-slate-500 tabular-nums leading-none mt-0.5">
+                {Math.round(pr)}
+              </span>
+              <span className="text-[7px] text-slate-300 dark:text-slate-600 tabular-nums leading-none">
+                {sd} SD
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ── LEGEND ── */}
-      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-x-6 gap-y-2">
-        {/* Aktuelle Messung – solid bar */}
-        <div className="flex items-center gap-2">
-          <div className="rounded-sm" style={{ width: 6, height: 18, backgroundColor: '#64748b' }} />
-          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Aktuelle Messung</span>
-        </div>
-        {/* Vorherige Messung – outlined bar */}
-        <div className="flex items-center gap-2">
-          <div className="rounded-sm bg-white border-2 border-slate-400" style={{ width: 8, height: 18 }} />
-          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Vorherige Messung</span>
-        </div>
-        {/* PR-Spanne – zone-colored range example */}
-        <div className="flex items-center gap-2">
-          <div className="relative rounded-sm overflow-hidden" style={{ width: 32, height: 14, border: '1.5px solid #64748b' }}>
-            <div className="absolute inset-y-0" style={{ left: 0, width: '43%', backgroundColor: '#dc2626' }} />
-            <div className="absolute inset-y-0" style={{ left: '43%', width: '57%', backgroundColor: '#15803d' }} />
+      {/* Legend — after axis when domain 6 is absent; injected inside domain 6 otherwise.
+          Suppressed entirely in print mode (rendered in the repeating page header). */}
+      {!hideLegend && explorationPairs.length === 0 && (
+        <ProfileLegend className="mt-4 pt-3 border-t border-slate-300 dark:border-slate-600" />
+      )}
+
+      {/* Domain 6: Visuelle Exploration — rendered after axis; legend injected before Explorationsaufgaben
+          (omitted in print mode — the legend lives in the repeating page header instead). */}
+      {explorationPairs.length > 0 && (() => {
+        const legendNode = hideLegend ? undefined : (
+          <ProfileLegend className="mt-3 mb-2 pt-2 border-t border-slate-300 dark:border-slate-600" />
+        );
+        return (
+          <div className={hasMainContent ? 'mt-6' : ''}>
+            {explorationPairs.map(({ cfg, dataDomain }, di) =>
+              renderDomain(cfg, dataDomain, di === 0, legendNode)
+            )}
           </div>
-          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">PR-Spanne</span>
-        </div>
-      </div>
+        );
+      })()}
+
+      {/* Extra content for domain 6 (GF/Neglect) rendered inside this card */}
+      {extraBottomContent}
     </div>
   );
 };

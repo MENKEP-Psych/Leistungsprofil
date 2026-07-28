@@ -8,7 +8,9 @@ export interface PatientListItem {
   geburtsdatum: string;
   geschlecht: 'm' | 'w' | 'd';
   status: 'aktiv' | 'entlassen';
+  mitarbeiter: string[];
   neuropsychologin?: string;
+  entlassdatum?: string;
   updatedAt: { seconds: number } | null;
 }
 

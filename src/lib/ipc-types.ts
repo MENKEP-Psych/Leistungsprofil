@@ -6,12 +6,11 @@ export interface RawPatient {
   encryptedGeschlecht: string;
   encryptedBildungsjahre: string | null;
   encryptedNeuropsychologin: string | null;
+  encryptedMitarbeiter: string | null;
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
   encryptedLokalisation: string | null;
-  encryptedStation: string | null;
-  encryptedZimmer: string | null;
   status: string;
   createdBy: string | null;
   createdAt: number;
@@ -41,12 +40,11 @@ export interface PatientCreatePayload {
   encryptedGeschlecht: string;
   encryptedBildungsjahre: string | null;
   encryptedNeuropsychologin: string | null;
+  encryptedMitarbeiter: string | null;
   encryptedAufnahmedatum: string | null;
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
   encryptedLokalisation: string | null;
-  encryptedStation: string | null;
-  encryptedZimmer: string | null;
   encryptedGeneralNote: string;
   createdBy: string | null;
 }
@@ -57,12 +55,11 @@ export interface PatientUpdatePayload {
   encryptedGeschlecht?: string;
   encryptedBildungsjahre?: string | null;
   encryptedNeuropsychologin?: string | null;
+  encryptedMitarbeiter?: string | null;
   encryptedAufnahmedatum?: string | null;
   encryptedEntlassdatum?: string | null;
   encryptedDiagnose?: string | null;
   encryptedLokalisation?: string | null;
-  encryptedStation?: string | null;
-  encryptedZimmer?: string | null;
   status?: string;
 }
 
@@ -129,6 +126,10 @@ export interface ElectronAPI {
   getPatient: (id: string) => Promise<{ patient: RawPatient; results: RawTestResult[]; encryptedNote: string } | null>;
   createPatient: (data: PatientCreatePayload) => Promise<boolean>;
   updatePatient: (id: string, updates: PatientUpdatePayload) => Promise<boolean>;
+  deletePatient: (id: string) => Promise<boolean>;
+
+  // PDF folder picker
+  pickFolder: () => Promise<string | null>;
 
   // Test results
   saveResult: (patientId: string, result: TestResultPayload, createdBy: string | null) => Promise<boolean>;
@@ -168,9 +169,23 @@ export interface ElectronAPI {
   syncGetServerPath: () => Promise<string>;
   syncSetServerPath: (path: string) => Promise<{ success: boolean; error?: string }>;
   syncHasLocalChanges: () => Promise<boolean>;
+  syncGetNormsStore: () => Promise<string>;
+  syncSetNormsStore: (data: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Textbausteine shared JSON store (next to server DB)
+  textbausteinGetStore: () => Promise<string>;
+  textbausteinSetStore: (data: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Notifications shared JSON store (next to server DB)
+  notificationsGetStore: () => Promise<string>;
+  notificationsSetStore: (data: string) => Promise<{ success: boolean; error?: string }>;
 
   // PDF
   getPdfFolder: () => Promise<string>;
   setPdfFolder: (folder: string) => Promise<{ success: boolean; error?: string }>;
   savePdf: (filename: string, bytes: number[]) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
+  // Render the print-optimised profile in a hidden window and export it as a vector PDF.
+  exportProfilePdf: (patientId: string, filename: string) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
+  // Print window → main: print layout has finished rendering (fire-and-forget).
+  printReady: () => void;
 }

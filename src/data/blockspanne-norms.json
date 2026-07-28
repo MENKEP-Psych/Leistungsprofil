@@ -1,0 +1,165 @@
+{
+  "meta": {
+    "test": "WMS-R Blockspanne (VM 3)",
+    "normset": "Altersgruppen",
+    "titel": "Prozentränge nach Altersgruppen – vorwärts und rückwärts",
+    "einheit": "Rohwert (Anzahl korrekter Blöcke)",
+    "hinweis": "Höhere Rohwerte = bessere Leistung. Niedrigere Werte = schlechtere Leistung. PR = Prozentrang. Fußnote 1: Im Original vertauscht bzw. Druckfehler.",
+    "quelle": "© 2002 Ulrich Goertz für GrafikTextCompilation (WMS-R VM 3)"
+  },
+  "altersgruppen_spalten": [
+    "15–19 Jahre",
+    "20–25 Jahre",
+    "26–34 Jahre",
+    "35–44 Jahre",
+    "45–54 Jahre",
+    "55–64 Jahre",
+    "65–74 Jahre"
+  ],
+  "normen": [
+    {
+      "rohwert": 13,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": null, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": null },
+        "26–34 Jahre": { "vorwärts": null, "rückwärts": null },
+        "35–44 Jahre": { "vorwärts": null, "rückwärts": null },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": null },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": null },
+        "65–74 Jahre": { "vorwärts": 98, "rückwärts": null }
+      }
+    },
+    {
+      "rohwert": 12,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 99, "rückwärts": 98 },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": null },
+        "26–34 Jahre": { "vorwärts": null, "rückwärts": 93 },
+        "35–44 Jahre": { "vorwärts": 93, "rückwärts": null },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": null },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": null },
+        "65–74 Jahre": { "vorwärts": null, "rückwärts": null }
+      }
+    },
+    {
+      "rohwert": 11,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 92, "rückwärts": 90 },
+        "20–25 Jahre": { "vorwärts": 95, "rückwärts": 93 },
+        "26–34 Jahre": { "vorwärts": 97, "rückwärts": 88 },
+        "35–44 Jahre": { "vorwärts": 88, "rückwärts": null },
+        "45–54 Jahre": { "vorwärts": 98, "rückwärts": 97 },
+        "55–64 Jahre": { "vorwärts": 98, "rückwärts": 97 },
+        "65–74 Jahre": { "vorwärts": 95, "rückwärts": null }
+      }
+    },
+    {
+      "rohwert": 10,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 80, "rückwärts": 73 },
+        "20–25 Jahre": { "vorwärts": 76, "rückwärts": 75 },
+        "26–34 Jahre": { "vorwärts": 90, "rückwärts": 78 },
+        "35–44 Jahre": { "vorwärts": 78, "rückwärts": 92 },
+        "45–54 Jahre": { "vorwärts": 90, "rückwärts": 92 },
+        "55–64 Jahre": { "vorwärts": 95, "rückwärts": 92 },
+        "65–74 Jahre": { "vorwärts": 88, "rückwärts": 97 }
+      }
+    },
+    {
+      "rohwert": 9,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 60, "rückwärts": 50 },
+        "20–25 Jahre": { "vorwärts": 50, "rückwärts": 58 },
+        "26–34 Jahre": { "vorwärts": 65, "rückwärts": 55 },
+        "35–44 Jahre": { "vorwärts": 57, "rückwärts": 68 },
+        "45–54 Jahre": { "vorwärts": 71, "rückwärts": 79 },
+        "55–64 Jahre": { "vorwärts": 85, "rückwärts": 85 },
+        "65–74 Jahre": { "vorwärts": 77, "rückwärts": 90 }
+      }
+    },
+    {
+      "rohwert": 8,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 37, "rückwärts": 25 },
+        "20–25 Jahre": { "vorwärts": 26, "rückwärts": 45 },
+        "26–34 Jahre": { "vorwärts": 32, "rückwärts": 32 },
+        "35–44 Jahre": { "vorwärts": 32, "rückwärts": 40 },
+        "45–54 Jahre": { "vorwärts": 50, "rückwärts": 55 },
+        "55–64 Jahre": { "vorwärts": 58, "rückwärts": 70 },
+        "65–74 Jahre": { "vorwärts": 57, "rückwärts": 67 }
+      }
+    },
+    {
+      "rohwert": 7,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": null, "rückwärts": 7 },
+        "20–25 Jahre": { "vorwärts": 10, "rückwärts": 29 },
+        "26–34 Jahre": { "vorwärts": 13, "rückwärts": 13 },
+        "35–44 Jahre": { "vorwärts": 13, "rückwärts": 23 },
+        "45–54 Jahre": { "vorwärts": 25, "rückwärts": 31 },
+        "55–64 Jahre": { "vorwärts": 27, "rückwärts": 45 },
+        "65–74 Jahre": { "vorwärts": 28, "rückwärts": 40 }
+      }
+    },
+    {
+      "rohwert": 6,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 15, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": 3, "rückwärts": 12 },
+        "26–34 Jahre": { "vorwärts": 5, "rückwärts": 3 },
+        "35–44 Jahre": { "vorwärts": 3, "rückwärts": 13 },
+        "45–54 Jahre": { "vorwärts": 5, "rückwärts": 11 },
+        "55–64 Jahre": { "vorwärts": 7, "rückwärts": 22 },
+        "65–74 Jahre": { "vorwärts": 8, "rückwärts": 27 }
+      }
+    },
+    {
+      "rohwert": 5,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": 2, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": 2 },
+        "26–34 Jahre": { "vorwärts": 2, "rückwärts": null },
+        "35–44 Jahre": { "vorwärts": null, "rückwärts": 5 },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": 2 },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": 10 },
+        "65–74 Jahre": { "vorwärts": 2, "rückwärts": 10 }
+      }
+    },
+    {
+      "rohwert": 4,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": null, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": null },
+        "26–34 Jahre": { "vorwärts": null, "rückwärts": null },
+        "35–44 Jahre": { "vorwärts": null, "rückwärts": 2 },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": null },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": 5 },
+        "65–74 Jahre": { "vorwärts": null, "rückwärts": null }
+      }
+    },
+    {
+      "rohwert": 3,
+      "pr": {
+        "15–19 Jahre": { "vorwärts": null, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": null },
+        "26–34 Jahre": { "vorwärts": null, "rückwärts": null },
+        "35–44 Jahre": { "vorwärts": null, "rückwärts": null },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": null },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": null },
+        "65–74 Jahre": { "vorwärts": null, "rückwärts": null }
+      }
+    },
+    {
+      "rohwert": "≤2",
+      "pr": {
+        "15–19 Jahre": { "vorwärts": null, "rückwärts": null },
+        "20–25 Jahre": { "vorwärts": null, "rückwärts": null },
+        "26–34 Jahre": { "vorwärts": null, "rückwärts": null },
+        "35–44 Jahre": { "vorwärts": null, "rückwärts": null },
+        "45–54 Jahre": { "vorwärts": null, "rückwärts": null },
+        "55–64 Jahre": { "vorwärts": null, "rückwärts": 2 },
+        "65–74 Jahre": { "vorwärts": null, "rückwärts": null }
+      }
+    }
+  ]
+}

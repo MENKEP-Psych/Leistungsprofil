@@ -639,8 +639,8 @@ const defaultFilters: Filters = { diagnose:'', lokalisation:'', geschlecht:'', a
 function applyFilters(rows: AnalyticsRow[], f: Filters): AnalyticsRow[] {
   return rows
     .filter(r=>{
-      if (f.diagnose && r.patient.diagnose!==f.diagnose) return false;
-      if (f.lokalisation && !(r.patient.lokalisation??'').includes(f.lokalisation)) return false;
+      if (f.diagnose && !(r.patient.diagnose??[]).includes(f.diagnose)) return false;
+      if (f.lokalisation && !Object.values(r.patient.lokalisation??{}).some(v=>v.includes(f.lokalisation))) return false;
       if (f.geschlecht && r.patient.geschlecht!==f.geschlecht) return false;
       const age=r.patient.age;
       if (f.ageMin && age<parseInt(f.ageMin,10)) return false;
@@ -694,10 +694,10 @@ export const AnalyticsSection: React.FC = () => {
 
   const filteredData = useMemo(() => data ? applyFilters(data, filters) : null, [data, filters]);
 
-  const allDiagnosen = useMemo(() => data ? Array.from(new Set(data.map(r=>r.patient.diagnose).filter((d): d is string=>!!d))).sort() : [], [data]);
+  const allDiagnosen = useMemo(() => data ? Array.from(new Set(data.flatMap(r=>r.patient.diagnose??[]))).sort() : [], [data]);
   const allLokalisationen = useMemo(() => {
     if (!data) return [];
-    const parts = data.flatMap(r=>(r.patient.lokalisation??'').split(' · ').map(s=>s.trim()).filter(Boolean));
+    const parts = data.flatMap(r=>Object.values(r.patient.lokalisation??{}).flatMap(v=>v.split(' · ').map(s=>s.trim()).filter(Boolean)));
     return Array.from(new Set(parts)).sort();
   }, [data]);
 
@@ -734,9 +734,12 @@ export const AnalyticsSection: React.FC = () => {
       .map(([id,n])=>({ id, label: TEST_LABELS[id]??id, n }))
       .sort((a,b)=>b.n-a.n);
 
-    // Diagnosis breakdown
+    // Diagnosis breakdown (Patient:innen mit Mehrfachdiagnosen zählen in jeder ihrer Diagnosen)
     const diagnoseCounts: Record<string,number> = {};
-    for (const r of d) { const k=r.patient.diagnose??'(keine Angabe)'; diagnoseCounts[k]=(diagnoseCounts[k]??0)+1; }
+    for (const r of d) {
+      const ks = r.patient.diagnose && r.patient.diagnose.length>0 ? r.patient.diagnose : ['(keine Angabe)'];
+      for (const k of ks) diagnoseCounts[k]=(diagnoseCounts[k]??0)+1;
+    }
     const diagnoseBreakdown = Object.entries(diagnoseCounts).map(([label,n])=>({label,n})).sort((a,b)=>b.n-a.n);
 
     // ── Per-test stats ────────────────────────────────────────────────────────
@@ -893,14 +896,14 @@ export const AnalyticsSection: React.FC = () => {
       d.filter(row => testIds.some(tid => expandResults(row.results).filter(r=>r.testId===tid).length>=2)).map(r=>r.patient.id)
     ).size;
 
-    // ── Diagnose × mittlerer PR ───────────────────────────────────────────────
+    // ── Diagnose × mittlerer PR (Mehrfachdiagnosen fließen in jede ihrer Diagnosen ein) ──
     const diagPRMap: Record<string,number[]> = {};
     for (const row of d) {
-      const key = row.patient.diagnose??'(keine Angabe)';
+      const keys = row.patient.diagnose && row.patient.diagnose.length>0 ? row.patient.diagnose : ['(keine Angabe)'];
       const prVals = row.results.map(r=>avgPR(r)).filter((v): v is number=>v!==null);
       if (prVals.length===0) continue;
-      if (!diagPRMap[key]) diagPRMap[key]=[];
-      diagPRMap[key].push(_mean(prVals));
+      const mean = _mean(prVals);
+      for (const key of keys) { if (!diagPRMap[key]) diagPRMap[key]=[]; diagPRMap[key].push(mean); }
     }
     const diagMeanPR: DiagMeanPR[] = Object.entries(diagPRMap)
       .map(([diag,vals])=>({ diag, n:vals.length, mean:_mean(vals), sd:_sd(vals) }))
@@ -909,7 +912,7 @@ export const AnalyticsSection: React.FC = () => {
     // ── Lokalisation × mittlerer PR ───────────────────────────────────────────
     const lokPRMap: Record<string,number[]> = {};
     for (const row of d) {
-      const loks = (row.patient.lokalisation??'').split(' · ').map(s=>s.trim()).filter(Boolean);
+      const loks = Object.values(row.patient.lokalisation??{}).flatMap(v=>v.split(' · ').map(s=>s.trim()).filter(Boolean));
       const prVals = row.results.map(r=>avgPR(r)).filter((v): v is number=>v!==null);
       if (prVals.length===0||loks.length===0) continue;
       const mean = _mean(prVals);

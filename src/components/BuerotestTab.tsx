@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
-import { FileText } from 'lucide-react';
+import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
+import { OctagonX, X, History as HistoryIcon } from 'lucide-react';
 import { Patient, TestResult } from '../types';
-import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import {
-  TestMeta, NoteField, FormSave, AbortButton, AbortBadge,
-  PageHeader, HistoryHeader, EmptyHistory, HistoryRowActions,
-} from './TestForm';
+import { AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
 
 interface BuerotestTabProps {
   patient: Patient;
@@ -18,31 +15,28 @@ interface BuerotestTabProps {
   onDelete: (id: string) => void;
 }
 
-export const BuerotestTab: React.FC<BuerotestTabProps> = ({
-  patient, previousResults, onSave, onUpdate, onDelete,
-}) => {
+export const BuerotestTab: React.FC<BuerotestTabProps> = ({ patient, previousResults, onSave, onUpdate, onDelete }) => {
   const { currentUser } = useAuth();
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [examiner, setExaminer] = useState(currentUser ?? '');
-  const [aufgabe1, setAufgabe1] = useState('');
+  const [date,           setDate]           = useState(new Date().toISOString().split('T')[0]);
+  const [examiner,       setExaminer]       = useState(currentUser ?? '');
+  const [aufgabe1,       setAufgabe1]       = useState('');
   const [aufgabe6variant, setAufgabe6variant] = useState<'A' | 'B'>('A');
-  const [aufgabe6, setAufgabe6] = useState('');
-  const [note, setNote] = useState('');
-  const [lastSaved, setLastSaved] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [aufgabe6,       setAufgabe6]       = useState('');
+  const [note,           setNote]           = useState('');
+  const [lastSaved,      setLastSaved]      = useState(false);
+  const [editingId,      setEditingId]      = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [aborted, setAborted] = useState(false);
-  const [abortComment, setAbortComment] = useState('');
+  const [aborted,        setAborted]        = useState(false);
+  const [abortComment,   setAbortComment]   = useState('');
 
-  const bueroResults = previousResults
+  const results = previousResults
     .filter(r => r.testId === 'buerotest')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const resetForm = () => {
+  const reset = () => {
     setAufgabe1(''); setAufgabe6variant('A'); setAufgabe6(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
-    setEditingId(null);
     setAborted(false); setAbortComment('');
   };
 
@@ -58,148 +52,186 @@ export const BuerotestTab: React.FC<BuerotestTabProps> = ({
     setAbortComment(res.abortComment ?? '');
   };
 
+  const cancelEdit = () => { setEditingId(null); reset(); };
+
   const handleSave = () => {
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'buerotest',
-      date,
+      testId: 'buerotest', date, examiner, note,
       rawValues: { aufgabe1, aufgabe6variant, aufgabe6 },
-      calculatedValues: {},
-      percentileRanks: {},
+      calculatedValues: {}, percentileRanks: {},
       normInfo: 'Bürotest – Qualitative Auswertung',
-      examiner,
-      note,
       aborted: aborted || undefined,
       abortComment: aborted ? abortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
-    setLastSaved(true);
-    setTimeout(() => setLastSaved(false), 3000);
-    resetForm();
+    setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);
+    reset();
   };
 
   useShortcutSave(handleSave);
+  const containerRef = useAutoFocusFirst<HTMLDivElement>();
 
-  const textareaCls = 'w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none';
+  const textareaCls = 'w-full px-3 py-2.5 bg-white rounded-xl text-sm text-slate-700 placeholder:text-slate-300 outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all resize-none';
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={<FileText size={22} />}
-        title="Bürotest"
-        subtitle="Qualitative Auswertung · 5. Exekutive Funktionen"
-      />
+    <div className="space-y-4" ref={containerRef}>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ── INPUT ── */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none space-y-4">
+      <div className="flex items-baseline gap-3">
+        <h2 className="text-[17px] font-semibold text-slate-800 tracking-tight">Bürotest</h2>
+        <span className="text-[11px] text-slate-400">Qualitative Auswertung · Exekutive Funktionen</span>
+      </div>
 
-          <TestMeta date={date} onDate={setDate} examiner={examiner} onExaminer={setExaminer} />
+      <div className="grid grid-cols-2 gap-4 items-start">
 
-          {/* Aufgabe 1 */}
-          <div className="space-y-1.5">
-            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Aufgabe 1</label>
-            <textarea
-              value={aufgabe1}
-              onChange={e => setAufgabe1(e.target.value)}
-              placeholder="Ergebnis / Beobachtungen zu Aufgabe 1..."
-              className={cn(textareaCls, 'h-24')}
-            />
+        {/* Left: Aufgaben */}
+        <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+          <div className="px-5 py-2.5 bg-slate-800">
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Aufgaben</span>
           </div>
+          <div className="p-5 space-y-4">
 
-          {/* Aufgabe 6 with A/B toggle */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Aufgabe 6</label>
-              <div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-xl p-0.5 gap-0.5">
-                {(['A', 'B'] as const).map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setAufgabe6variant(v)}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-black transition-all',
-                      aufgabe6variant === v
-                        ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm'
-                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300',
-                    )}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
+            {/* Aufgabe 1 */}
+            <div className="space-y-1.5">
+              <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Aufgabe 1</label>
+              <textarea value={aufgabe1} onChange={e => setAufgabe1(e.target.value)}
+                placeholder="Ergebnis / Beobachtungen zu Aufgabe 1…" rows={4}
+                className={textareaCls} />
             </div>
-            <textarea
-              value={aufgabe6}
-              onChange={e => setAufgabe6(e.target.value)}
-              placeholder={`Ergebnis / Beobachtungen zu Aufgabe 6${aufgabe6variant}...`}
-              className={cn(textareaCls, 'h-24')}
-            />
-          </div>
 
-          <NoteField value={note} onChange={setNote} />
-          <AbortButton aborted={aborted} comment={abortComment} onToggle={() => setAborted(a => !a)} onComment={setAbortComment} />
-          <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={resetForm} />
+            {/* Aufgabe 6 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Aufgabe 6</label>
+                <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                  {(['A', 'B'] as const).map(v => (
+                    <button key={v} type="button" onClick={() => setAufgabe6variant(v)}
+                      className={cn(
+                        'px-3 py-1 rounded-md text-xs font-bold transition-all',
+                        aufgabe6variant === v
+                          ? 'bg-slate-800 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600',
+                      )}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea value={aufgabe6} onChange={e => setAufgabe6(e.target.value)}
+                placeholder={`Ergebnis / Beobachtungen zu Aufgabe 6${aufgabe6variant}…`} rows={4}
+                className={textareaCls} />
+            </div>
+
+          </div>
         </div>
 
-        {/* ── HISTORY ── */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none">
-          <div className="mb-4">
-            <HistoryHeader count={bueroResults.length} />
+        {/* Right: Untersuchung */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="px-5 py-2.5 bg-slate-800 rounded-t-2xl">
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Untersuchung</span>
           </div>
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Datum</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Untersucher</label>
+                <input type="text" value={examiner} onChange={e => setExaminer(e.target.value)} placeholder="Kürzel"
+                  className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Notiz</label>
+              <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Besonderheiten…"
+                className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
+            </div>
+            {!aborted ? (
+              <button type="button" onClick={() => setAborted(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors w-full">
+                <OctagonX size={13} /> Test abgebrochen / unvollständig
+              </button>
+            ) : (
+              <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-orange-600 bg-orange-50 rounded-xl border border-orange-100 w-full">
+                <OctagonX size={13} /> Abgebrochen <X size={11} className="ml-auto" />
+              </button>
+            )}
+            {aborted && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-orange-50 border border-orange-100">
+                  <OctagonX size={14} className="text-orange-400 shrink-0" />
+                  <span className="text-sm font-medium text-orange-700 flex-1">Abgebrochen / unvollständig</span>
+                  <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
+                    className="text-orange-300 hover:text-orange-500 transition-colors rounded p-0.5"><X size={13} /></button>
+                </div>
+                <textarea value={abortComment} onChange={e => setAbortComment(e.target.value)}
+                  placeholder="Grund (optional)…" rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none placeholder:text-orange-300" />
+              </div>
+            )}
+            <div className="pt-1">
+              <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
+            </div>
+          </div>
+        </div>
 
-          {bueroResults.length === 0 ? <EmptyHistory /> : (
-            <div className="space-y-3">
-              {bueroResults.map(res => (
-                <div
-                  key={res.id}
-                  className={cn(
-                    'rounded-xl border p-4 transition-colors',
-                    editingId === res.id
-                      ? 'border-indigo-300 dark:border-indigo-700 bg-indigo-50/50 dark:bg-indigo-900/20'
-                      : 'border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{formatDate(res.date)}</span>
-                      {res.aborted && <AbortBadge comment={res.abortComment} />}
-                      {res.examiner && <span className="text-[10px] text-slate-400 dark:text-slate-500">· {res.examiner}</span>}
-                    </div>
+      </div>
+
+      {/* History */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-2.5 bg-slate-800 flex items-center gap-2">
+          <span className="text-[10px] font-bold text-white uppercase tracking-widest">Vorherige Messungen</span>
+          {results.length > 0 && (
+            <span className="text-[10px] bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-md font-semibold">{results.length}</span>
+          )}
+        </div>
+        {results.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 text-gray-300">
+            <HistoryIcon size={36} strokeWidth={1.5} className="mb-3" />
+            <p className="text-sm font-medium text-gray-400">Noch keine Messungen gespeichert</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {results.map(res => (
+              <div key={res.id} className={cn('p-5 transition-colors', editingId === res.id && 'bg-gray-100/60')}>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <HistoryDate date={res.date} geburtsdatum={patient.geburtsdatum} />
+                    {res.aborted && <AbortBadge comment={res.abortComment} />}
+                    {res.examiner && <span className="text-[9px] text-gray-400">{res.examiner}</span>}
+                  </div>
+                  {patient.status !== 'entlassen' && (
                     <HistoryRowActions
-                      id={res.id}
-                      editingId={editingId}
-                      confirmDeleteId={confirmDeleteId}
-                      patientDischarged={patient.status === 'entlassen'}
-                      onEdit={() => editingId === res.id ? resetForm() : startEdit(res)}
+                      id={res.id} editingId={editingId} confirmDeleteId={confirmDeleteId} patientDischarged={false}
+                      onEdit={() => { setConfirmDeleteId(null); editingId === res.id ? cancelEdit() : startEdit(res); }}
                       onDelete={() => { onDelete(res.id); setConfirmDeleteId(null); }}
                       onConfirmDelete={() => { onDelete(res.id); setConfirmDeleteId(null); }}
                       onSetConfirm={() => { setConfirmDeleteId(res.id); setEditingId(null); }}
                     />
-                  </div>
-                  {res.rawValues.aufgabe1 && (
-                    <div className="mb-2">
-                      <div className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Aufgabe 1</div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                        {String(res.rawValues.aufgabe1)}
-                      </p>
-                    </div>
                   )}
-                  {res.rawValues.aufgabe6 && (
-                    <div className="mb-2">
-                      <div className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">
-                        Aufgabe 6{res.rawValues.aufgabe6variant ? ` (${res.rawValues.aufgabe6variant})` : ''}
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                        {String(res.rawValues.aufgabe6)}
-                      </p>
-                    </div>
-                  )}
-                  {res.note && <p className="text-[10px] italic text-slate-400 dark:text-slate-500 mt-1">{res.note}</p>}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                {res.rawValues.aufgabe1 && (
+                  <div className="mb-2">
+                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Aufgabe 1</div>
+                    <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{String(res.rawValues.aufgabe1)}</p>
+                  </div>
+                )}
+                {res.rawValues.aufgabe6 && (
+                  <div className="mb-2">
+                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">
+                      Aufgabe 6{res.rawValues.aufgabe6variant ? ` (${res.rawValues.aufgabe6variant})` : ''}
+                    </div>
+                    <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{String(res.rawValues.aufgabe6)}</p>
+                  </div>
+                )}
+                {res.note && <p className="text-[10px] italic text-gray-400 mt-1">{res.note}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

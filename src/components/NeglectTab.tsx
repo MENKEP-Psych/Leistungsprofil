@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
-import { Save, History, CheckCircle2, Eye, Pencil, X, ChevronDown, ChevronUp, Trash2, Check } from 'lucide-react';
-import { PageHeader } from './TestForm';
+import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
+import { OctagonX, X, History as HistoryIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import { Patient, TestResult } from '../types';
-import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
+import { AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const EXP_KEYS: ReadonlyArray<readonly [string, string]> = [
-  ['Linienhalbieren',  'exp_linien'],
-  ['▲ durchstreichen', 'exp_dreieck'],
-  ['Apples-Test',      'exp_apples'],
-  ['Abzeichnen',       'exp_abzeichen'],
-  ['Uhr zeichnen',     'exp_uhr'],
-] as const;
-
-// ── Main component ────────────────────────────────────────────────────────────
+const EXP_FIELDS: { key: string; label: string }[] = [
+  { key: 'exp_linien',    label: 'Linienhalbieren'  },
+  { key: 'exp_dreieck',   label: '▲ durchstreichen' },
+  { key: 'exp_apples',    label: 'Apples-Test'      },
+  { key: 'exp_abzeichen', label: 'Abzeichnen'       },
+  { key: 'exp_uhr',       label: 'Uhr zeichnen'     },
+];
 
 interface NeglectTabProps {
   patient: Patient;
@@ -27,311 +23,245 @@ interface NeglectTabProps {
   onDelete: (id: string) => void;
 }
 
-export const NeglectTab: React.FC<NeglectTabProps> = ({
-  patient,
-  previousResults,
-  onSave,
-  onUpdate,
-  onDelete,
-}) => {
+export const NeglectTab: React.FC<NeglectTabProps> = ({ patient, previousResults, onSave, onUpdate, onDelete }) => {
   const { currentUser } = useAuth();
-  const [date,     setDate]     = useState(new Date().toISOString().split('T')[0]);
-  const [examiner, setExaminer] = useState(currentUser ?? '');
-  const [note,     setNote]     = useState('');
-
-  const [expLinien,    setExpLinien]    = useState('');
-  const [expDreieck,   setExpDreieck]   = useState('');
-  const [expApples,    setExpApples]    = useState('');
-  const [expAbzeichen, setExpAbzeichen] = useState('');
-  const [expUhr,       setExpUhr]       = useState('');
-  const [expFreitext,  setExpFreitext]  = useState('');
-
-  const [editingId,       setEditingId]       = useState<string | null>(null);
-  const [lastSaved,       setLastSaved]       = useState(false);
+  const [date,           setDate]          = useState(new Date().toISOString().split('T')[0]);
+  const [examiner,       setExaminer]      = useState(currentUser ?? '');
+  const [note,           setNote]          = useState('');
+  const [expLinien,      setExpLinien]     = useState('');
+  const [expDreieck,     setExpDreieck]    = useState('');
+  const [expApples,      setExpApples]     = useState('');
+  const [expAbzeichen,   setExpAbzeichen]  = useState('');
+  const [expUhr,         setExpUhr]        = useState('');
+  const [expFreitext,    setExpFreitext]   = useState('');
+  const [lastSaved,      setLastSaved]     = useState(false);
+  const [editingId,      setEditingId]     = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [expandedId,      setExpandedId]      = useState<string | null>(null);
+  const [expandedId,     setExpandedId]    = useState<string | null>(null);
+  const [aborted,        setAborted]       = useState(false);
+  const [abortComment,   setAbortComment]  = useState('');
 
-  const expResults = previousResults
+  const results = previousResults
     .filter(r => r.testId === 'neglect_gf')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const resetForm = () => {
+  const fieldValues: Record<string, string> = {
+    exp_linien:    expLinien,
+    exp_dreieck:   expDreieck,
+    exp_apples:    expApples,
+    exp_abzeichen: expAbzeichen,
+    exp_uhr:       expUhr,
+  };
+
+  const fieldSetters: Record<string, (v: string) => void> = {
+    exp_linien:    setExpLinien,
+    exp_dreieck:   setExpDreieck,
+    exp_apples:    setExpApples,
+    exp_abzeichen: setExpAbzeichen,
+    exp_uhr:       setExpUhr,
+  };
+
+  const reset = () => {
     setExpLinien(''); setExpDreieck(''); setExpApples('');
     setExpAbzeichen(''); setExpUhr(''); setExpFreitext('');
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
+    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
-    const r = res.rawValues;
     setEditingId(res.id);
     setDate(res.date);
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
-    setExpLinien(String(r.exp_linien ?? ''));
-    setExpDreieck(String(r.exp_dreieck ?? ''));
-    setExpApples(String(r.exp_apples ?? ''));
-    setExpAbzeichen(String(r.exp_abzeichen ?? ''));
-    setExpUhr(String(r.exp_uhr ?? ''));
-    setExpFreitext(String(r.exp_freitext ?? ''));
+    setExpLinien(String(res.rawValues.exp_linien ?? ''));
+    setExpDreieck(String(res.rawValues.exp_dreieck ?? ''));
+    setExpApples(String(res.rawValues.exp_apples ?? ''));
+    setExpAbzeichen(String(res.rawValues.exp_abzeichen ?? ''));
+    setExpUhr(String(res.rawValues.exp_uhr ?? ''));
+    setExpFreitext(String(res.rawValues.exp_freitext ?? ''));
+    setAborted(res.aborted ?? false);
+    setAbortComment(res.abortComment ?? '');
   };
 
-  const cancelEdit = () => { setEditingId(null); resetForm(); };
+  const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    const rawValues: Record<string, string> = {
-      exp_linien:    expLinien,
-      exp_dreieck:   expDreieck,
-      exp_apples:    expApples,
-      exp_abzeichen: expAbzeichen,
-      exp_uhr:       expUhr,
-      exp_freitext:  expFreitext,
-    };
-
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'neglect_gf',
-      date,
-      rawValues,
-      calculatedValues: {},
-      percentileRanks: {},
+      testId: 'neglect_gf', date, examiner, note,
+      rawValues: {
+        exp_linien: expLinien, exp_dreieck: expDreieck,
+        exp_apples: expApples, exp_abzeichen: expAbzeichen,
+        exp_uhr: expUhr, exp_freitext: expFreitext,
+      },
+      calculatedValues: {}, percentileRanks: {},
       normInfo: '',
-      examiner,
-      note,
+      aborted: aborted || undefined,
+      abortComment: aborted ? abortComment : undefined,
     };
-
-    if (editingId) { onUpdate(result); setEditingId(null); }
-    else           { onSave(result); }
-
-    setLastSaved(true);
-    setTimeout(() => setLastSaved(false), 3000);
-    resetForm();
+    if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
+    setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);
+    reset();
   };
 
   useShortcutSave(handleSave);
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const containerRef = useAutoFocusFirst<HTMLDivElement>();
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={<Eye size={22} />}
-        title="Explorationsaufgaben"
-        subtitle="Linienhalbieren · Apples-Test · Abzeichnen · Uhr zeichnen"
-      />
+    <div className="space-y-4" ref={containerRef}>
 
-      {/* ── FORM CARD ── */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-6">
-
-        {/* Form header */}
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 flex items-center gap-2">
-            <Save size={16} className="text-indigo-600" />
-            {editingId ? 'Untersuchung bearbeiten' : 'Neue Untersuchung'}
-          </h3>
-          {editingId && (
-            <button
-              onClick={cancelEdit}
-              className="flex items-center gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-            >
-              <X size={13} /> Abbrechen
-            </button>
-          )}
-        </div>
-
-        {/* Date + Examiner */}
-        <div className="grid grid-cols-2 gap-4 max-w-xs">
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
-              Datum
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
-              Untersucher
-            </label>
-            <input
-              type="text"
-              value={examiner}
-              onChange={e => setExaminer(e.target.value)}
-              placeholder="Kürzel"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-        </div>
-
-        {/* ── EXPLORATIONSAUFGABEN ── */}
-        <div className="space-y-2">
-          {([
-            ['Linienhalbieren',  expLinien,    setExpLinien],
-            ['▲ durchstreichen', expDreieck,   setExpDreieck],
-            ['Apples-Test',      expApples,    setExpApples],
-            ['Abzeichnen',       expAbzeichen, setExpAbzeichen],
-            ['Uhr zeichnen',     expUhr,       setExpUhr],
-          ] as [string, string, (v: string) => void][]).map(([label, val, setter]) => (
-            <div key={label} className="flex items-center gap-3">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 w-36 shrink-0 text-right italic">
-                {label}
-              </span>
-              <div className="flex-1 border-b border-dashed border-slate-300 dark:border-slate-600">
-                <input
-                  type="text"
-                  value={val}
-                  onChange={e => setter(e.target.value)}
-                  placeholder=""
-                  className="w-full bg-transparent text-sm outline-none py-0.5 text-slate-700 dark:text-slate-200"
-                />
-              </div>
-            </div>
-          ))}
-          {/* Freitext */}
-          <div className="flex items-start gap-3 pt-1">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 w-36 shrink-0 text-right italic pt-1">
-              Freitext
-            </span>
-            <div className="flex-1">
-              <textarea
-                value={expFreitext}
-                onChange={e => setExpFreitext(e.target.value)}
-                placeholder="Qualitative Beobachtungen, weitere Tests..."
-                rows={2}
-                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700 dark:text-slate-200 resize-none"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Note */}
-        <div>
-          <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">
-            Notiz (optional)
-          </label>
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Beobachtungen, Besonderheiten..."
-            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 h-16 resize-none"
-          />
-        </div>
-
-        {/* Save */}
-        <button
-          onClick={handleSave}
-          className={cn(
-            'w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2',
-            lastSaved
-              ? 'bg-emerald-500 text-white'
-              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
-          )}
-        >
-          {lastSaved   ? <><CheckCircle2 size={18} /> Gespeichert!</> :
-           editingId   ? <><Save size={18} /> Änderung speichern</> :
-                         <><Save size={18} /> Untersuchung speichern</>}
-        </button>
+      <div className="flex items-baseline gap-3">
+        <h2 className="text-[17px] font-semibold text-slate-800 tracking-tight">Explorationsaufgaben</h2>
+        <span className="text-[11px] text-slate-400">Linienhalbieren · Apples-Test · Abzeichnen · Uhr zeichnen</span>
       </div>
 
-      {/* ── HISTORY ── */}
-      {expResults.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-          <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
-            <History size={16} className="text-indigo-600" />
-            Verlauf
-          </h3>
-          <div className="space-y-2">
-            {expResults.map(res => {
-              const isExpanded = expandedId === res.id;
-              const hasExpData = EXP_KEYS.some(([, k]) => res.rawValues[k]);
+      <div className="grid grid-cols-2 gap-4 items-start">
 
+        {/* Left: Exploration */}
+        <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+          <div className="px-5 py-2.5 bg-slate-800">
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Exploration</span>
+          </div>
+          <div className="p-5 space-y-4">
+            {EXP_FIELDS.map(({ key, label }) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-[11px] font-semibold text-slate-500 w-36 shrink-0 text-right italic">{label}</span>
+                <div className="flex-1 border-b border-dashed border-slate-300">
+                  <input type="text" value={fieldValues[key]} onChange={e => fieldSetters[key](e.target.value)}
+                    placeholder=""
+                    className="w-full bg-transparent text-sm outline-none py-1 text-slate-700 placeholder:text-slate-300" />
+                </div>
+              </div>
+            ))}
+            <div className="flex items-start gap-3 pt-1">
+              <span className="text-[11px] font-semibold text-slate-500 w-36 shrink-0 text-right italic pt-1">Freitext</span>
+              <div className="flex-1">
+                <textarea value={expFreitext} onChange={e => setExpFreitext(e.target.value)}
+                  placeholder="Qualitative Beobachtungen, weitere Tests…" rows={3}
+                  className="w-full px-3 py-2 bg-white rounded-xl text-sm text-slate-700 placeholder:text-slate-300 outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all resize-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Untersuchung */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="px-5 py-2.5 bg-slate-800 rounded-t-2xl">
+            <span className="text-[10px] font-bold text-white uppercase tracking-widest">Untersuchung</span>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Datum</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all" />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Untersucher</label>
+                <input type="text" value={examiner} onChange={e => setExaminer(e.target.value)} placeholder="Kürzel"
+                  className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-widest">Notiz</label>
+              <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Besonderheiten…"
+                className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
+            </div>
+            {!aborted ? (
+              <button type="button" onClick={() => setAborted(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors w-full">
+                <OctagonX size={13} /> Test abgebrochen / unvollständig
+              </button>
+            ) : (
+              <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-orange-600 bg-orange-50 rounded-xl border border-orange-100 w-full">
+                <OctagonX size={13} /> Abgebrochen <X size={11} className="ml-auto" />
+              </button>
+            )}
+            {aborted && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-orange-50 border border-orange-100">
+                  <OctagonX size={14} className="text-orange-400 shrink-0" />
+                  <span className="text-sm font-medium text-orange-700 flex-1">Abgebrochen / unvollständig</span>
+                  <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
+                    className="text-orange-300 hover:text-orange-500 transition-colors rounded p-0.5"><X size={13} /></button>
+                </div>
+                <textarea value={abortComment} onChange={e => setAbortComment(e.target.value)}
+                  placeholder="Grund (optional)…" rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none placeholder:text-orange-300" />
+              </div>
+            )}
+            <div className="pt-1">
+              <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* History */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-2.5 bg-slate-800 flex items-center gap-2">
+          <span className="text-[10px] font-bold text-white uppercase tracking-widest">Vorherige Messungen</span>
+          {results.length > 0 && (
+            <span className="text-[10px] bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded-md font-semibold">{results.length}</span>
+          )}
+        </div>
+        {results.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 text-gray-300">
+            <HistoryIcon size={36} strokeWidth={1.5} className="mb-3" />
+            <p className="text-sm font-medium text-gray-400">Noch keine Messungen gespeichert</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {results.map(res => {
+              const isExpanded = expandedId === res.id;
+              const hasExpData = EXP_FIELDS.some(f => res.rawValues[f.key]) || res.rawValues.exp_freitext;
               return (
-                <div key={res.id} className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
-                  {/* Summary row */}
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50/80 dark:bg-slate-700/40">
-                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{formatDate(res.date)}</span>
-                    {res.examiner && (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">{res.examiner}</span>
-                    )}
+                <div key={res.id} className={cn('transition-colors', editingId === res.id && 'bg-gray-100/60')}>
+                  <div className="flex items-center gap-3 px-5 py-3">
+                    <div className="flex items-center gap-1.5 font-medium text-gray-700">
+                      <HistoryDate date={res.date} geburtsdatum={patient.geburtsdatum} />
+                      {res.aborted && <AbortBadge comment={res.abortComment} />}
+                    </div>
+                    {res.examiner && <span className="text-[9px] text-gray-400">{res.examiner}</span>}
                     <div className="ml-auto flex items-center gap-1">
                       {hasExpData && (
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : res.id)}
-                          className="flex items-center gap-1 px-2 py-1 text-[10px] font-black text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
-                        >
+                        <button type="button" onClick={() => setExpandedId(isExpanded ? null : res.id)}
+                          className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                           {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                           {isExpanded ? 'Einklappen' : 'Details'}
                         </button>
                       )}
                       {patient.status !== 'entlassen' && (
-                        <>
-                          <button
-                            onClick={() => { setConfirmDeleteId(null); editingId === res.id ? cancelEdit() : startEdit(res); }}
-                            className={cn(
-                              'p-1.5 rounded-lg transition-colors',
-                              editingId === res.id
-                                ? 'bg-indigo-100 text-indigo-600'
-                                : 'hover:bg-indigo-50 text-slate-300 hover:text-indigo-500'
-                            )}
-                            title="Bearbeiten"
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          {confirmDeleteId === res.id ? (
-                            <button
-                              onClick={() => { onDelete(res.id); setConfirmDeleteId(null); }}
-                              className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                              title="Löschen bestätigen"
-                            >
-                              <Check size={12} />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => { setConfirmDeleteId(res.id); setEditingId(null); }}
-                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors"
-                              title="Löschen"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
-                        </>
+                        <HistoryRowActions
+                          id={res.id} editingId={editingId} confirmDeleteId={confirmDeleteId} patientDischarged={false}
+                          onEdit={() => { setConfirmDeleteId(null); editingId === res.id ? cancelEdit() : startEdit(res); }}
+                          onDelete={() => { onDelete(res.id); setConfirmDeleteId(null); }}
+                          onConfirmDelete={() => { onDelete(res.id); setConfirmDeleteId(null); }}
+                          onSetConfirm={() => { setConfirmDeleteId(res.id); setEditingId(null); }}
+                        />
                       )}
                     </div>
                   </div>
-
-                  {/* Expanded detail */}
                   {isExpanded && (
-                    <div className="p-4 space-y-3 bg-white dark:bg-slate-800">
-                      <div className="space-y-1">
-                        {EXP_KEYS.map(([label, key]) =>
-                          res.rawValues[key] ? (
-                            <div key={key} className="flex gap-2 text-xs">
-                              <span className="text-slate-400 dark:text-slate-500 italic w-36 shrink-0 text-right">
-                                {label}:
-                              </span>
-                              <span className="text-slate-700 dark:text-slate-200">{String(res.rawValues[key])}</span>
-                            </div>
-                          ) : null
-                        )}
-                        {res.rawValues.exp_freitext && (
-                          <div className="flex gap-2 text-xs">
-                            <span className="text-slate-400 dark:text-slate-500 italic w-36 shrink-0 text-right">
-                              Freitext:
-                            </span>
-                            <span className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">
-                              {String(res.rawValues.exp_freitext)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      {res.note && (
-                        <div className="text-xs italic text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-700 pt-2">
-                          {res.note}
+                    <div className="px-5 pb-4 space-y-1.5 bg-white border-t border-gray-50">
+                      {EXP_FIELDS.map(f => res.rawValues[f.key] ? (
+                        <div key={f.key} className="flex gap-3 text-xs">
+                          <span className="text-gray-400 italic w-36 shrink-0 text-right">{f.label}:</span>
+                          <span className="text-gray-600">{String(res.rawValues[f.key])}</span>
                         </div>
+                      ) : null)}
+                      {res.rawValues.exp_freitext && (
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-gray-400 italic w-36 shrink-0 text-right">Freitext:</span>
+                          <span className="text-gray-600 whitespace-pre-wrap">{String(res.rawValues.exp_freitext)}</span>
+                        </div>
+                      )}
+                      {res.note && (
+                        <div className="text-[10px] italic text-gray-400 border-t border-gray-50 pt-2 mt-2">{res.note}</div>
                       )}
                     </div>
                   )}
@@ -339,8 +269,8 @@ export const NeglectTab: React.FC<NeglectTabProps> = ({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

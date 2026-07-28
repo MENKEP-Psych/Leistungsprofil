@@ -75,7 +75,12 @@ export function usePatientData(id: string | null) {
 
   useEffect(() => {
     if (!id || !encryptionKey) {
-      if (!id) setIsLoading(false);
+      if (!id) {
+        setPatient(null);
+        setPreviousResults([]);
+        setGeneralNote('');
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -180,8 +185,15 @@ export function usePatientData(id: string | null) {
       setPatient(updatedPatient);
       // Notify PatientList to refresh its data (for filter/neuropsychologin updates)
       window.dispatchEvent(new Event('patients_updated'));
+      const fmtValue = (v: unknown): string => {
+        if (Array.isArray(v)) return v.join(', ');
+        if (v && typeof v === 'object') {
+          return Object.entries(v as Record<string, string>).map(([dk, dv]) => `${dk}: ${dv}`).join(' | ');
+        }
+        return String(v);
+      };
       const fieldDetails = Object.entries(updates)
-        .map(([k, v]) => `${FIELD_LABELS[k] ?? k}: ${v}`)
+        .map(([k, v]) => `${FIELD_LABELS[k] ?? k}: ${fmtValue(v)}`)
         .join(', ');
       await addEntry('PATIENT_UPDATED', updatedPatient.name, fieldDetails);
     }

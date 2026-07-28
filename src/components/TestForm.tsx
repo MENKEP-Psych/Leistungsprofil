@@ -1,12 +1,13 @@
 /**
  * Shared design system for all test input forms.
- * Ensures visual consistency across TAP, TMT, VLMT, TOL, etc.
  */
 import React from 'react';
 import { Save, CheckCircle2, X, History, OctagonX } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatDate, calculateAge } from '../lib/utils';
 
-// ── PR color coding (single source of truth) ──────────────────────────────────
+const noSpinner = 'appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
+// ── PR color coding ───────────────────────────────────────────────────────────
 
 export function prColorCls(pr: number | string): string {
   let n: number;
@@ -22,31 +23,29 @@ export function prColorCls(pr: number | string): string {
       n = isNaN(v) ? 99 : Math.min(100, v + 1);
     } else {
       const lo = parseFloat(s);
-      const hiM = s.match(/[-\u2013]>?(\d+)/);
+      const hiM = s.match(/[-–]>?(\d+)/);
       const hi = hiM ? parseFloat(hiM[1]) : NaN;
       n = isNaN(hi) ? lo : (lo + hi) / 2;
     }
   }
-  if (isNaN(n) || n < 2)  return 'bg-red-100    text-red-700    dark:bg-red-900/30    dark:text-red-400';
-  if (n < 16)             return 'bg-orange-100  text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
-  if (n < 31)             return 'bg-yellow-100  text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-600';
-  if (n < 69)             return 'bg-green-100   text-green-700  dark:bg-green-900/30  dark:text-green-400';
-  if (n < 84)             return 'bg-blue-100    text-blue-700   dark:bg-blue-900/30   dark:text-blue-400';
-  if (n < 98)             return 'bg-violet-100  text-violet-700 dark:bg-violet-900/30 dark:text-violet-400';
-  return                         'bg-purple-100  text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
+  if (isNaN(n) || n < 2)  return 'bg-red-100    text-red-700';
+  if (n < 16)             return 'bg-orange-100  text-orange-700';
+  if (n < 31)             return 'bg-yellow-100  text-yellow-700';
+  if (n < 69)             return 'bg-green-100   text-green-700';
+  if (n < 84)             return 'bg-blue-100    text-blue-700';
+  if (n < 98)             return 'bg-violet-100  text-violet-700';
+  return                         'bg-purple-100  text-purple-800';
 }
 
-// ── PrBadge — display-only colored pill (for history tables) ──────────────────
+// ── PrBadge ───────────────────────────────────────────────────────────────────
 
 export const PrBadge: React.FC<{ value: number | string }> = ({ value }) => (
-  <span className={cn('inline-block px-2 py-0.5 rounded-lg font-black text-[11px] tabular-nums', prColorCls(value))}>
+  <span className={cn('inline-block px-2.5 py-0.5 rounded-xl font-semibold text-[11px] tabular-nums', prColorCls(value))}>
     {value}
   </span>
 );
 
-// ── PrField — THE signature PR input, always identical across all tabs ─────────
-// Indigo "PR" badge + free-text input. Instantly recognizable everywhere.
-// Use inside SectionCard's `pr` prop — the card adds the "Prozentrang (PR)" label.
+// ── PrField ───────────────────────────────────────────────────────────────────
 
 interface PrFieldProps {
   value: string;
@@ -61,11 +60,11 @@ export const PrField: React.FC<PrFieldProps> = ({
   className,
 }) => (
   <div className={cn(
-    'flex items-stretch rounded-xl overflow-hidden border-2 border-indigo-200 dark:border-indigo-800',
-    'focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/15 transition-all',
+    'flex items-stretch rounded-2xl overflow-hidden bg-gray-50 transition-all',
+    'focus-within:bg-white focus-within:ring-2 focus-within:ring-gray-200',
     className,
   )}>
-    <div className="px-3 flex items-center bg-indigo-600 text-white text-[11px] font-black tracking-widest shrink-0 select-none">
+    <div className="px-3 flex items-center bg-slate-900 text-white text-[11px] font-semibold tracking-widest shrink-0 select-none rounded-l-2xl">
       PR
     </div>
     <input
@@ -73,13 +72,12 @@ export const PrField: React.FC<PrFieldProps> = ({
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
-      className="flex-1 px-3 py-2.5 text-sm font-mono text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-700 outline-none placeholder:text-indigo-300 dark:placeholder:text-indigo-700"
+      className="flex-1 px-3 py-2.5 text-sm font-mono text-gray-700 bg-transparent outline-none placeholder:text-gray-300"
     />
   </div>
 );
 
-// ── StackedField — label directly above input, no stretching gap ──────────────
-// Use this instead of RawField wherever the label → input distance feels too wide.
+// ── StackedField ──────────────────────────────────────────────────────────────
 
 interface StackedFieldProps {
   label: string;
@@ -95,10 +93,13 @@ export const StackedField: React.FC<StackedFieldProps> = ({
   label, value, onChange, unit, allowDecimal = false, numeric = true, placeholder = '—',
 }) => (
   <div className="space-y-1 min-w-0">
-    <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide leading-tight truncate">
+    <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-tight truncate">
       {label}
     </label>
-    <div className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-400 transition-all">
+    <div className={cn(
+      'flex items-center gap-1.5 rounded-xl px-3 py-2 transition-all',
+      'bg-gray-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-gray-200',
+    )}>
       <input
         type="text"
         inputMode={allowDecimal ? 'decimal' : numeric ? 'numeric' : 'text'}
@@ -111,15 +112,14 @@ export const StackedField: React.FC<StackedFieldProps> = ({
               : e.target.value,
         )}
         placeholder={placeholder}
-        className="flex-1 min-w-0 text-sm font-mono text-center text-slate-700 dark:text-slate-200 bg-transparent outline-none"
+        className="flex-1 min-w-0 text-sm font-mono text-center text-gray-700 bg-transparent outline-none"
       />
-      {unit && <span className="text-xs text-slate-400 dark:text-slate-500 font-medium shrink-0">{unit}</span>}
+      {unit && <span className="text-xs text-gray-400 font-medium shrink-0">{unit}</span>}
     </div>
   </div>
 );
 
-// ── RawField — horizontal label + input (used in VE table rows) ───────────────
-// Note: for form fields, prefer StackedField to avoid label→input distance issues.
+// ── RawField ──────────────────────────────────────────────────────────────────
 
 interface RawFieldProps {
   label: string;
@@ -134,10 +134,10 @@ export const RawField: React.FC<RawFieldProps> = ({
   label, value, onChange, unit, allowDecimal = false, width = 'w-20',
 }) => (
   <div className="flex items-center gap-3 py-0.5">
-    <span className="text-sm text-slate-500 dark:text-slate-400 flex-1 leading-tight">{label}</span>
+    <span className="text-sm text-gray-500 flex-1 leading-tight">{label}</span>
     <div className={cn(
-      'flex items-center gap-1.5 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5',
-      'bg-white dark:bg-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-400 transition-all',
+      'flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all',
+      'bg-gray-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-gray-200',
     )}>
       <input
         type="text"
@@ -149,15 +149,14 @@ export const RawField: React.FC<RawFieldProps> = ({
             : e.target.value.replace(/[^0-9-]/g, ''),
         )}
         placeholder="—"
-        className={cn(width, 'text-sm font-mono text-center text-slate-700 dark:text-slate-200 bg-transparent outline-none')}
+        className={cn(width, 'text-sm font-mono text-center text-gray-700 bg-transparent outline-none')}
       />
-      {unit && <span className="text-xs text-slate-400 dark:text-slate-500 font-medium shrink-0">{unit}</span>}
+      {unit && <span className="text-xs text-gray-400 font-medium shrink-0">{unit}</span>}
     </div>
   </div>
 );
 
-// ── MsGroup — RT (M) + SD (s) side by side, each with label above ────────────
-// 2-column stacked grid: label is directly above its input, no stretching gap.
+// ── MsGroup ───────────────────────────────────────────────────────────────────
 
 interface MsGroupProps {
   rtLabel?: string;
@@ -174,13 +173,13 @@ export const MsGroup: React.FC<MsGroupProps> = ({
   sdLabel = 'Standardabw. (s)',
   sdValue, onSd,
 }) => (
-  <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 px-4 py-3 grid grid-cols-2 gap-3">
+  <div className="rounded-2xl bg-gray-50/80 px-4 py-3 grid grid-cols-2 gap-3">
     <StackedField label={rtLabel} value={rtValue} onChange={onRt} unit="ms" />
     <StackedField label={sdLabel} value={sdValue} onChange={onSd} unit="ms" />
   </div>
 );
 
-// ── CountField — integer count (horizontal, for VE table) ────────────────────
+// ── CountField ────────────────────────────────────────────────────────────────
 
 interface CountFieldProps {
   label: string;
@@ -197,30 +196,27 @@ export const CountField: React.FC<CountFieldProps> = ({ label, value, onChange }
   />
 );
 
-// ── SectionCard — groups related fields with a title ──────────────────────────
+// ── SectionCard ───────────────────────────────────────────────────────────────
 
 interface SectionCardProps {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  pr?: React.ReactNode; // PrField to render at the bottom
+  pr?: React.ReactNode;
 }
 
 export const SectionCard: React.FC<SectionCardProps> = ({ title, subtitle, children, pr }) => (
-  <div className="rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-    {/* Section header */}
-    <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700">
-      <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">{title}</span>
-      {subtitle && <span className="ml-2 text-[10px] text-slate-400 dark:text-slate-500 font-medium">{subtitle}</span>}
+  <div className="rounded-[20px] bg-white shadow-xl shadow-slate-300/60 overflow-hidden">
+    <div className="px-4 py-3 border-b border-gray-50">
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{title}</span>
+      {subtitle && <span className="ml-2 text-[10px] text-gray-400 font-medium">{subtitle}</span>}
     </div>
-    {/* Fields */}
-    <div className="px-4 py-3 space-y-1 bg-white dark:bg-slate-800">
+    <div className="px-4 py-3 space-y-1">
       {children}
     </div>
-    {/* PR always at bottom — with clear label so users know what to enter */}
     {pr && (
-      <div className="px-4 pb-4 bg-white dark:bg-slate-800 border-t border-indigo-50 dark:border-indigo-900/40 pt-3">
-        <p className="text-[10px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest mb-1.5">
+      <div className="px-4 pb-4 border-t border-gray-50 pt-3">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">
           Prozentrang (PR) — aus dem Testprotokoll
         </p>
         {pr}
@@ -229,7 +225,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({ title, subtitle, child
   </div>
 );
 
-// ── TestMeta — date + examiner row (identical across all tabs) ────────────────
+// ── TestMeta ──────────────────────────────────────────────────────────────────
 
 interface TestMetaProps {
   date: string;
@@ -241,22 +237,22 @@ interface TestMetaProps {
 export const TestMeta: React.FC<TestMetaProps> = ({ date, onDate, examiner, onExaminer }) => (
   <div className="grid grid-cols-2 gap-3">
     <div className="space-y-1.5">
-      <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Datum</label>
+      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Datum</label>
       <input
         type="date"
         value={date}
         onChange={e => onDate(e.target.value)}
-        className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
+        className="w-full px-3 py-2.5 bg-gray-50 rounded-xl text-sm text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-gray-200 transition-all"
       />
     </div>
     <div className="space-y-1.5">
-      <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Untersucher</label>
+      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Untersucher</label>
       <input
         type="text"
         value={examiner}
         onChange={e => onExaminer(e.target.value)}
         placeholder="Kürzel"
-        className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+        className="w-full px-3 py-2.5 bg-gray-50 rounded-xl text-sm text-gray-700 outline-none focus:bg-white focus:ring-2 focus:ring-gray-200 transition-all placeholder:text-gray-300"
       />
     </div>
   </div>
@@ -271,18 +267,18 @@ interface NoteFieldProps {
 
 export const NoteField: React.FC<NoteFieldProps> = ({ value, onChange }) => (
   <div className="space-y-1.5">
-    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Notiz (optional)</label>
+    <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Notiz (optional)</label>
     <textarea
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder="Besonderheiten, Beobachtungen…"
       rows={2}
-      className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-600 dark:text-slate-300 placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none"
+      className="w-full px-3 py-2.5 bg-gray-50 rounded-xl text-sm text-gray-600 placeholder:text-gray-300 outline-none focus:bg-white focus:ring-2 focus:ring-gray-200 transition-all resize-none"
     />
   </div>
 );
 
-// ── AbortButton — toggle + optional comment textarea ──────────────────────────
+// ── AbortButton ───────────────────────────────────────────────────────────────
 
 interface AbortButtonProps {
   aborted: boolean;
@@ -297,10 +293,10 @@ export const AbortButton: React.FC<AbortButtonProps> = ({ aborted, comment, onTo
       type="button"
       onClick={onToggle}
       className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all w-full',
+        'flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-medium transition-all w-full',
         aborted
-          ? 'bg-orange-100 text-orange-700 border-2 border-orange-400 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-600'
-          : 'bg-slate-50 text-slate-400 border-2 border-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:border-slate-600 hover:border-orange-300 hover:text-orange-600 dark:hover:text-orange-400',
+          ? 'bg-orange-50 text-orange-700 border border-orange-100'
+          : 'bg-gray-50 text-gray-400 hover:bg-orange-50 hover:text-orange-600',
       )}
     >
       <OctagonX size={15} className="shrink-0" />
@@ -312,17 +308,17 @@ export const AbortButton: React.FC<AbortButtonProps> = ({ aborted, comment, onTo
         onChange={e => onComment(e.target.value)}
         placeholder="Grund für Abbruch (z.B. Patient verweigerte Weiterführung, Ermüdung, Zeit)"
         rows={2}
-        className="w-full px-3 py-2 text-sm border-2 border-orange-300 rounded-xl bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700 dark:text-slate-200 outline-none focus:border-orange-500 resize-none placeholder:text-orange-300 dark:placeholder:text-orange-700"
+        className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 resize-none placeholder:text-orange-300"
       />
     )}
   </div>
 );
 
-// ── AbortBadge — small pill shown in history tables ───────────────────────────
+// ── AbortBadge ────────────────────────────────────────────────────────────────
 
 export const AbortBadge: React.FC<{ comment?: string }> = ({ comment }) => (
   <span
-    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 whitespace-nowrap"
+    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[9px] font-semibold bg-orange-100 text-orange-700 whitespace-nowrap"
     title={comment || 'Abgebrochen'}
   >
     <OctagonX size={8} />
@@ -330,7 +326,7 @@ export const AbortBadge: React.FC<{ comment?: string }> = ({ comment }) => (
   </span>
 );
 
-// ── FormSave — save / cancel button row ──────────────────────────────────────
+// ── FormSave ──────────────────────────────────────────────────────────────────
 
 interface FormSaveProps {
   onSave: () => void;
@@ -344,10 +340,10 @@ export const FormSave: React.FC<FormSaveProps> = ({ onSave, saved, editingId, on
     <button
       onClick={onSave}
       className={cn(
-        'flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all active:scale-95',
+        'flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-semibold transition-all active:scale-95',
         saved
-          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 dark:shadow-none'
-          : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200/60 dark:shadow-none',
+          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200'
+          : 'bg-slate-900 hover:bg-slate-700 text-white shadow-md shadow-slate-400/20',
       )}
     >
       {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
@@ -356,7 +352,7 @@ export const FormSave: React.FC<FormSaveProps> = ({ onSave, saved, editingId, on
     {editingId && (
       <button
         onClick={onCancel}
-        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+        className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-sm font-medium text-gray-400 hover:text-gray-600 hover:bg-white transition-all"
       >
         <X size={14} />
         Abbrechen
@@ -365,7 +361,7 @@ export const FormSave: React.FC<FormSaveProps> = ({ onSave, saved, editingId, on
   </div>
 );
 
-// ── PageHeader — standardized test tab header (single source of truth) ────────
+// ── PageHeader ────────────────────────────────────────────────────────────────
 
 interface PageHeaderProps {
   icon: React.ReactNode;
@@ -375,12 +371,12 @@ interface PageHeaderProps {
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ icon, title, subtitle }) => (
   <div className="flex items-center gap-4">
-    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 dark:shadow-none shrink-0">
+    <div className="w-12 h-12 bg-slate-900 rounded-[16px] flex items-center justify-center text-white shadow-md shadow-slate-400/20 shrink-0">
       {icon}
     </div>
     <div>
-      <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{title}</h2>
-      <p className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">{subtitle}</p>
+      <h2 className="text-2xl font-semibold text-slate-800 tracking-tight">{title}</h2>
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">{subtitle}</p>
     </div>
   </div>
 );
@@ -389,10 +385,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ icon, title, subtitle })
 
 export const HistoryHeader: React.FC<{ count: number }> = ({ count }) => (
   <div className="flex items-center gap-2">
-    <History size={16} className="text-slate-400 dark:text-slate-500" />
-    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+    <History size={16} className="text-gray-400" />
+    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
       Vorherige Messungen
-      {count > 0 && <span className="ml-2 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 px-1.5 py-0.5 rounded-md font-black">{count}</span>}
+      {count > 0 && (
+        <span className="ml-2 text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-lg font-semibold">
+          {count}
+        </span>
+      )}
     </h3>
   </div>
 );
@@ -400,13 +400,40 @@ export const HistoryHeader: React.FC<{ count: number }> = ({ count }) => (
 // ── EmptyHistory ──────────────────────────────────────────────────────────────
 
 export const EmptyHistory: React.FC = () => (
-  <div className="flex flex-col items-center justify-center py-14 text-slate-300 dark:text-slate-600">
+  <div className="flex flex-col items-center justify-center py-14 text-gray-300">
     <History size={40} strokeWidth={1.5} className="mb-3" />
-    <p className="text-sm font-medium text-slate-400 dark:text-slate-500">Noch keine Messungen gespeichert</p>
+    <p className="text-sm font-medium text-gray-400">Noch keine Messungen gespeichert</p>
   </div>
 );
 
-// ── HistoryRowActions — edit + delete with confirm ────────────────────────────
+// ── HistoryDate ───────────────────────────────────────────────────────────────
+
+interface HistoryDateProps {
+  date: string;
+  geburtsdatum: string;
+}
+
+export const HistoryDate: React.FC<HistoryDateProps> = ({ date, geburtsdatum }) => {
+  const age = calculateAge(geburtsdatum, date);
+  return (
+    <span className="font-medium text-gray-700">
+      {formatDate(date)}
+      {age != null && (
+        <span className="ml-1 text-[10px] text-gray-400 font-normal">({age} J.)</span>
+      )}
+    </span>
+  );
+};
+
+// ── OutOfRangeWarning ────────────────────────────────────────────────────────
+export const OutOfRangeWarning: React.FC = () => (
+  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-amber-700">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span className="text-[11px] font-semibold">Alter außerhalb Normierungsbereich — PR-Werte nicht interpretierbar</span>
+  </div>
+);
+
+// ── HistoryRowActions ─────────────────────────────────────────────────────────
 
 import { Pencil, Trash2, Check } from 'lucide-react';
 
@@ -434,8 +461,8 @@ export const HistoryRowActions: React.FC<HistoryRowActionsProps> = ({
         className={cn(
           'p-1.5 rounded-lg transition-colors',
           editingId === id
-            ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'
-            : 'text-slate-300 dark:text-slate-600 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30',
+            ? 'bg-slate-200 text-slate-700'
+            : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-700',
         )}
       >
         <Pencil size={13} />
@@ -444,7 +471,7 @@ export const HistoryRowActions: React.FC<HistoryRowActionsProps> = ({
         <button
           onClick={onConfirmDelete}
           title="Löschen bestätigen"
-          className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 transition-colors"
+          className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
         >
           <Check size={13} />
         </button>
@@ -452,7 +479,7 @@ export const HistoryRowActions: React.FC<HistoryRowActionsProps> = ({
         <button
           onClick={onSetConfirm}
           title="Löschen"
-          className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+          className="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
         >
           <Trash2 size={13} />
         </button>
