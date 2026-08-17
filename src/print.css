@@ -62,12 +62,25 @@ body {
   page-break-inside: avoid; /* legacy alias for older engines */
 }
 
-/* Never split a Gesichtsfeld-/Neglect-test graphic (or a whole measurement
-   session grouping several of them) across a page boundary — previously these
-   could be cut mid-block and continue past the next page's repeating header. */
+/* Never split a single Gesichtsfeld-/Neglect-test graphic (one eye, or the
+   Neglect test) across a page boundary. Deliberately NOT applied to the whole
+   measurement session (.pr-neglect-session, which can contain up to four of
+   these graphics) — an unbreakable session block that's taller than the
+   remaining page space forced the renderer to push the *entire* session to
+   the next page, stranding the section heading alone at the bottom of the
+   previous page and leaving a mostly-empty page before the session started.
+   Protecting only the smallest unit lets the browser break between graphics
+   instead. */
 .pr-neglect-block {
   break-inside: avoid;
   page-break-inside: avoid;
+}
+
+/* Keep the "Gesichtsfeld- und Neglectprüfung (TAP)" section heading attached
+   to the first measurement session that follows it. */
+.pr-neglect-heading {
+  break-after: avoid;
+  page-break-after: avoid;
 }
 
 /* Keep a domain heading attached to the rows that follow it. */

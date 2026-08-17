@@ -384,7 +384,12 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
   // ---- Row renderers -------------------------------------------------------
 
   const BarRow = ({ res }: { res: PRResult }) => {
-    const isAbortedNoData = res.aborted && (res.currentPr === 'n/a' || res.currentPr === undefined);
+    // `res.currentPr === undefined` zählt IMMER als "keine Daten" — unabhängig von
+    // res.aborted. Das Aborted-Flag kann bei einer nicht mehr aktuellen Persistenz-Schicht
+    // verloren gehen (z. B. nach Neuladen aus einer älteren DB-Kopie), während
+    // percentileRanks weiterhin leer bleibt; ohne diesen Fallback würde `dotColor`/`prToNum`
+    // dann mit `undefined` aufgerufen und abstürzen ("Cannot read properties of undefined").
+    const isAbortedNoData = res.currentPr === undefined || (res.aborted && res.currentPr === 'n/a');
     const isNoPrData = !res.aborted && res.currentPr === 'n/a';
     const currPrNum = isAbortedNoData ? 50 : prToNum(res.currentPr);
     const currColor = isAbortedNoData ? '#9ca3af' : dotColor(res.currentPr);
@@ -412,8 +417,10 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
       : currPrNum < (prevPrNum as number) ? '#E14747'
       : '#94a3b8';
 
-    const detailsText     = !isAbortedNoData ? (res.details?.filter(Boolean).join('  ') || null) : null;
-    const prevDetailsText = !isAbortedNoData ? (res.previousDetails?.filter(Boolean).join('  ') || null) : null;
+    // Auch bei abgebrochenen Tests ohne Normwert sollen bereits erfasste Rohwerte
+    // weiterhin angezeigt werden (links neben dem "k.A."-Balken).
+    const detailsText     = res.details?.filter(Boolean).join('  ') || null;
+    const prevDetailsText = res.previousDetails?.filter(Boolean).join('  ') || null;
 
     // S/W-Druck: die helle Durchschnitts-Graustufe (#94a3b8) der Werttexte abdunkeln, damit lesbar.
     const inkPrint = (c: string) => (printMode && c === '#94a3b8' ? '#475569' : c);
@@ -688,7 +695,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
                   const tgTextResults = textInSub.filter(t => t.testGroup === tg);
                   // Show testGroup label only when no subsection heading exists,
                   // or explicitly for VLMT and LPS which need labeling within named subsections
-                  const showThisLabel = !sub.subLabel || tg === 'VLMT' || tg.includes('LPS') || tg.includes('Logisches Gedächtnis') || tg.includes('Visuelle Wiedergabe');
+                  const showThisLabel = !sub.subLabel || tg.startsWith('VLMT') || tg.includes('LPS') || tg.includes('Logisches Gedächtnis') || tg.includes('Visuelle Wiedergabe');
                   return (
                     <React.Fragment key={tg}>
                       {tgi === injectIdx && injectNode}

@@ -299,7 +299,9 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
                   </td>
                   <td className="px-3 py-3 text-center font-mono text-gray-600">{res.rawValues.rohwert}</td>
                   <td className="px-3 py-3 text-center">
-                    <PrBadge value={res.percentileRanks.alterkorrigiert} />
+                    {res.percentileRanks.alterkorrigiert !== undefined
+                      ? <PrBadge value={res.percentileRanks.alterkorrigiert} />
+                      : <span className="text-gray-300">–</span>}
                   </td>
                   <td className="px-3 py-3 text-center">
                     {res.percentileRanks.alter_bildung !== undefined

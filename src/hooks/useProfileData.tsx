@@ -62,8 +62,12 @@ const combineNotes = (latest: TestResult, previous?: TestResult): string | undef
 // die wird als Fallback für beide Teile verwendet.
 const combineTmtNotes = (latest: TestResult, previous: TestResult | undefined, part: 'A' | 'B'): string | undefined => {
   const field = part === 'A' ? 'noteA' : 'noteB';
-  const a = String(latest.rawValues[field] ?? latest.note ?? '').trim();
-  const b = previous ? String(previous.rawValues[field] ?? previous.note ?? '').trim() : '';
+  // Nur echte Alt-Datensätze (weder noteA noch noteB gesetzt) fallen auf die gemeinsame
+  // `note` zurück — sonst würde eine nur für den anderen Teil eingegebene Notiz hier
+  // fälschlich mit angezeigt.
+  const legacyNote = (r: TestResult) => (r.rawValues.noteA == null && r.rawValues.noteB == null) ? r.note : undefined;
+  const a = String(latest.rawValues[field] ?? legacyNote(latest) ?? '').trim();
+  const b = previous ? String(previous.rawValues[field] ?? legacyNote(previous) ?? '').trim() : '';
   let base = '';
   if (a && b) base = a === b ? a : `${a}\n[${formatDate(previous!.date)}] ${b}`;
   else if (a) base = a;
@@ -175,6 +179,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             testGroup: vlmtTestGroup,
             details: [m.getDetail(latest)],
             previousDetails: previous ? [m.getDetail(previous)] : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -289,6 +294,17 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       const tapSessionsFor = <T,>(accessor: (r: TestResult) => T | undefined) =>
         tapResults.filter(r => { const v = accessor(r); return !!v && String(v).trim() !== ''; });
 
+      // Wie tapSessionsFor, aber eine abgebrochene Sitzung zählt zusätzlich mit, wenn zwar
+      // kein Normwert vorliegt, aber mindestens einer der angegebenen Rohwert-Felder bereits
+      // ausgefüllt wurde — so erscheint bei Abbruch nur die tatsächlich begonnene Messung als
+      // "k.A."-Zeile mit Rohwert, statt entweder gar nichts oder gleich alle ~30 TAP-Messungen.
+      const tapSessionsForAllowAborted = (accessor: (r: TestResult) => unknown, ...rawKeys: (string | undefined)[]) =>
+        tapResults.filter(r => {
+          const v = accessor(r);
+          if (!!v && String(v).trim() !== '') return true;
+          return !!r.aborted && rawKeys.some(k => k != null && r.rawValues[k] != null && String(r.rawValues[k]).trim() !== '');
+        });
+
       // TAP Erst/Abschluss: Eingangstestung (e_) = „vorher", Abschlusstestung (b_) = „aktuell".
       // „vorher" wird nur gezeigt, wenn auch ein Abschlusswert vorliegt (sonst nur der eine Punkt).
       // Hauptmaße brauchen eine explizite e_/b_-Zuordnung (PR-Key ≠ rawValues-Key);
@@ -353,6 +369,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         gonogo: 'note_gn', gonogo2: 'note_gn2', flexibilitaet: 'note_fl',
         geteilte: 'note_ga', geteilteVisuell: 'note_ga',
         vigilanz: 'note_vig', arbeitsgedaechtnis: 'note_ag',
+        neg_pr: 'note_neg',
       };
       const tapNote = (r: TestResult, key: string): string | undefined => {
         const field = TAP_NOTE_FIELD[key];
@@ -378,12 +395,17 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       if (tapResults.length > 0) {
         for (const m of TAP_PR_MAP) {
           // Per-metric: find all sessions that actually have a value for this metric
-          const sessions = tapSessionsFor(r => r.percentileRanks[m.key]);
+          // (oder bei Abbruch zumindest einen erfassten Rohwert für dieses Maß).
+          const mainRawKey = TAP_MAIN_RT[m.key]?.rawKey;
+          const sessions = tapSessionsForAllowAborted(
+            r => r.percentileRanks[m.key],
+            mainRawKey, mainRawKey ? `b_${mainRawKey}` : undefined,
+          );
           if (sessions.length === 0) continue;
           const latest   = sessions[0];
           const previous = sessions[1];
 
-          const currPr = latest.percentileRanks[m.key]!;
+          const currPr = latest.percentileRanks[m.key] ?? (latest.aborted ? 'n/a' : undefined)!;
           // „vorher" = Eingangstestung der aktuellen Sitzung, nur wenn auch Abschluss vorhanden
           const eb = TAP_MAIN_EB[m.key];
           const erstVal      = eb ? latest.rawValues[eb.e] : undefined;
@@ -451,21 +473,22 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
               const sdErst      = latest.rawValues[sdDef.key];
               const sdAbschluss = latest.rawValues[`b_${sdDef.key}`];
               const sdCurrPr = tapTrim(sdAbschluss) ? sdAbschluss : sdErst;
-              if (sdCurrPr && String(sdCurrPr).trim() !== '') {
+              // Rohwert (ms) folgt derselben Eingang/Abschluss-Präferenz wie der PR (sdCurrPr) —
+              // sonst fehlt der Rohwert, wenn nur die Abschluss-/Wiederholungstestung ausgefüllt ist.
+              const sdRawErst      = latest.rawValues[sdDef.rawKey];
+              const sdRawAbschluss = latest.rawValues[`b_${sdDef.rawKey}`];
+              const sdHasRaw = tapTrim(sdRawErst) || tapTrim(sdRawAbschluss);
+              if ((sdCurrPr && String(sdCurrPr).trim() !== '') || (latest.aborted && sdHasRaw)) {
                 const sdPrevPr = (tapTrim(sdAbschluss) && tapTrim(sdErst)) ? sdErst : previous?.rawValues[sdDef.key];
-                // Rohwert (ms) folgt derselben Eingang/Abschluss-Präferenz wie der PR (sdCurrPr) —
-                // sonst fehlt der Rohwert, wenn nur die Abschluss-/Wiederholungstestung ausgefüllt ist.
-                const sdRawErst      = latest.rawValues[sdDef.rawKey];
-                const sdRawAbschluss = latest.rawValues[`b_${sdDef.rawKey}`];
                 const sdRaw = tapTrim(sdAbschluss) ? sdRawAbschluss : sdRawErst;
-                // „vorher"-Rohwert nur bei separater Vorsitzung (kein In-Sitzungs-Paar).
-                const sdPrevRaw = (tapTrim(sdAbschluss) && tapTrim(sdErst)) ? undefined : previous?.rawValues[sdDef.rawKey];
+                // „vorher"-Rohwert: Eingang derselben Sitzung, sonst der Rohwert der vorherigen Sitzung.
+                const sdPrevRaw = (tapTrim(sdAbschluss) && tapTrim(sdErst)) ? sdRawErst : previous?.rawValues[sdDef.rawKey];
                 const olderSdPrs = olderArr
                   .map(r => r.rawValues[sdDef.key])
                   .filter((v): v is string | number => !!v && String(v).trim() !== '');
                 data.push({
                   label: sdDef.label,
-                  currentPr: sdCurrPr,
+                  currentPr: sdCurrPr && String(sdCurrPr).trim() !== '' ? sdCurrPr : 'n/a',
                   previousPr: (sdPrevPr && String(sdPrevPr).trim() !== '') ? sdPrevPr : undefined,
                   previousPrs: olderSdPrs.length > 0 ? olderSdPrs : undefined,
                   date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(sdAbschluss) && tapTrim(sdErst)).date,
@@ -475,6 +498,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
                   testGroup: 'TAP',
                   details: sdRaw ? [`SD: ${sdRaw} ${sdDef.unit}`] : undefined,
                   previousDetails: tapTrim(sdPrevRaw) ? [`SD: ${sdPrevRaw} ${sdDef.unit}`] : undefined,
+                  note: tapNote(latest, m.key),
                   ...abt(latest),
                   ...pabt(previous),
                 });
@@ -487,22 +511,23 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             const fDef = TAP_FEHLER_AUSL_PR_MAP.find(f => f.key === fk);
             if (!fDef) continue;
             const fCurrPr = latest.percentileRanks[fk as keyof typeof latest.percentileRanks];
-            if (!fCurrPr || String(fCurrPr).trim() === '') continue;
             const fErst      = latest.rawValues[`e_${fk}`];
             const fAbschluss = latest.rawValues[`b_${fk}`];
-            const fPrevPr = (tapTrim(fAbschluss) && tapTrim(fErst)) ? fErst : previous?.percentileRanks[fk as keyof typeof latest.percentileRanks];
             // Rohwert (Anzahl) folgt derselben Eingang/Abschluss-Präferenz wie der PR (fCurrPr) —
             // sonst fehlt der Rohwert, wenn nur die Abschluss-/Wiederholungstestung ausgefüllt ist.
             const rawValErst      = latest.rawValues[fDef.rawKey];
             const rawValAbschluss = latest.rawValues[`b_${fDef.rawKey}`];
+            const fHasRaw = tapTrim(rawValErst) || tapTrim(rawValAbschluss);
+            if ((!fCurrPr || String(fCurrPr).trim() === '') && !(latest.aborted && fHasRaw)) continue;
+            const fPrevPr = (tapTrim(fAbschluss) && tapTrim(fErst)) ? fErst : previous?.percentileRanks[fk as keyof typeof latest.percentileRanks];
             const rawVal = tapTrim(fAbschluss) ? rawValAbschluss : rawValErst;
-            const fPrevRaw = (tapTrim(fAbschluss) && tapTrim(fErst)) ? undefined : previous?.rawValues[fDef.rawKey];
+            const fPrevRaw = (tapTrim(fAbschluss) && tapTrim(fErst)) ? rawValErst : previous?.rawValues[fDef.rawKey];
             const olderFPrs = olderArr
               .map(r => r.percentileRanks[fk as keyof typeof r.percentileRanks])
               .filter((v): v is string | number => !!v && String(v).trim() !== '');
             data.push({
               label: fDef.label,
-              currentPr: fCurrPr,
+              currentPr: (fCurrPr && String(fCurrPr).trim() !== '') ? fCurrPr : 'n/a',
               previousPr: (fPrevPr && String(fPrevPr).trim() !== '') ? fPrevPr : undefined,
               previousPrs: olderFPrs.length > 0 ? olderFPrs : undefined,
               date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(fAbschluss) && tapTrim(fErst)).date,
@@ -512,6 +537,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
               testGroup: 'TAP',
               details: rawVal != null && rawVal !== '' ? [`Wert: ${rawVal}`] : undefined,
               previousDetails: tapTrim(fPrevRaw) ? [`Wert: ${fPrevRaw}`] : undefined,
+              note: tapNote(latest, m.key),
               ...abt(latest),
               ...pabt(previous),
             });
@@ -523,12 +549,12 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       const TAP_VE_SUBDOMAIN = '6.1 Visuelles Scanning';
       if (tapResults.length > 0) {
         for (const m of TAP_VE_PR_MAP) {
-          const sessions = tapSessionsFor(r => r.percentileRanks[m.key]);
+          const sessions = tapSessionsForAllowAborted(r => r.percentileRanks[m.key], m.rawKey, `b_${m.rawKey}`);
           if (sessions.length === 0) continue;
           const latest   = sessions[0];
           const previous = sessions[1];
 
-          const currPr = latest.percentileRanks[m.key]!;
+          const currPr = latest.percentileRanks[m.key] ?? (latest.aborted ? 'n/a' : undefined)!;
           const veEb = TAP_VE_EB[m.key];
           const veErst      = veEb ? latest.rawValues[veEb.e] : undefined;
           const veAbschluss = veEb ? latest.rawValues[veEb.b] : undefined;
@@ -536,8 +562,12 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           const hasInSession = tapTrim(veAbschluss) && tapTrim(veErst);
           const prevPr = hasInSession ? veErst : previous?.percentileRanks[m.key];
           const olderArr = hasInSession ? sessions.slice(1) : sessions.slice(2);
-          const rawVal = latest.rawValues[m.rawKey];
-          const vePrevRaw = hasInSession ? undefined : previous?.rawValues[m.rawKey];
+          // Rohwert folgt derselben Eingang/Abschluss-Präferenz wie der PR (currPr) —
+          // sonst fehlt der Rohwert, wenn nur die Wiederholungstestung ausgefüllt ist.
+          const veRawErst      = latest.rawValues[m.rawKey];
+          const veRawAbschluss = latest.rawValues[`b_${m.rawKey}`];
+          const rawVal = tapTrim(veAbschluss) ? veRawAbschluss : veRawErst;
+          const vePrevRaw = hasInSession ? veRawErst : previous?.rawValues[m.rawKey];
           const veIsTapM = String(latest.rawValues.ve_ver ?? '') === 'M';
           const olderVePrs = olderArr
             .map(r => r.percentileRanks[m.key])
@@ -1143,11 +1173,14 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
     for (const res of expResultsForText) {
       const r = res.rawValues;
       const activeExp = EXP_FIELDS.filter(f => String(r[f.key] ?? '').trim() !== '');
-      if (activeExp.length === 0) continue;
+      const freitext = String(r.exp_freitext ?? '').trim();
+      if (activeExp.length === 0 && !freitext) continue;
+      const items: { label: string; text: string }[] = activeExp.map(f => ({ label: f.label, text: String(r[f.key]) }));
+      if (freitext) items.push({ label: 'Freitext', text: freitext });
       textResults.push({
         domain: '6. Visuelle Exploration',
         testGroup: 'Explorationsaufgaben',
-        items: activeExp.map(f => ({ label: f.label, text: String(r[f.key]) })),
+        items,
         date: res.date,
         note: res.note ?? undefined,
       });
@@ -1195,7 +1228,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
     const extraBottomContent: React.ReactNode = hasTapGf ? (
       <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-5">
         <div>
-          <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3 pl-2 border-l-2 border-slate-200 dark:border-slate-700">
+          <div className="pr-neglect-heading text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3 pl-2 border-l-2 border-slate-200 dark:border-slate-700">
             Gesichtsfeld- und Neglectprüfung (TAP)
           </div>
           {tapGfData.map((res, idx) => {
@@ -1237,8 +1270,8 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             };
 
             return (
-              <div key={res.id} className={`pr-neglect-block ${idx > 0 ? 'border-t border-slate-100 dark:border-slate-800 pt-4' : ''}`}>
-                <div className="flex items-center gap-2 mb-3">
+              <div key={res.id} className={`pr-neglect-session ${idx > 0 ? 'border-t border-slate-100 dark:border-slate-800 pt-4' : ''}`}>
+                <div className="pr-neglect-heading flex items-center gap-2 mb-3">
                   <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded px-2 py-0.5 uppercase tracking-widest">
                     {sessionLabel}
                   </span>

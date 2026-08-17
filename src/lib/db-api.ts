@@ -107,6 +107,8 @@ export async function fetchPatient(
     normInfo: r.normInfo ?? '',
     domainMapping: r.domainMapping ? JSON.parse(r.domainMapping) : undefined,
     note: r.note ?? undefined,
+    aborted: r.aborted ? true : undefined,
+    abortComment: r.abortComment ?? undefined,
   }));
 
   const sorted = [...results].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -228,6 +230,8 @@ export async function dbSaveResult(
     normInfo: result.normInfo,
     domainMapping: result.domainMapping ? JSON.stringify(result.domainMapping) : null,
     note: result.note ?? null,
+    aborted: result.aborted ? 1 : null,
+    abortComment: result.abortComment ?? null,
   };
   return getElectronAPI().saveResult(patientId, payload, createdBy);
 }
@@ -246,6 +250,8 @@ export async function dbUpdateResult(patientId: string, result: TestResult, encr
     normInfo: result.normInfo,
     domainMapping: result.domainMapping ? JSON.stringify(result.domainMapping) : null,
     note: result.note ?? null,
+    aborted: result.aborted ? 1 : null,
+    abortComment: result.abortComment ?? null,
   };
   return getElectronAPI().updateResult(patientId, payload);
 }

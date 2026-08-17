@@ -105,6 +105,10 @@ function createSchema(): void {
   try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_mitarbeiter TEXT'); } catch { /* already exists */ }
   // Track when user credentials were last changed so push can sync password updates.
   try { getDb().exec('ALTER TABLE users ADD COLUMN updated_at INTEGER NOT NULL DEFAULT (unixepoch())'); } catch { /* already exists */ }
+  // Abgebrochene/unvollständige Tests: bisher nur im Renderer gehalten, nie persistiert —
+  // ging bei jedem Neuladen verloren (Absturz in PRProfile, siehe TMT/TOL "profile"-Fehler).
+  try { getDb().exec('ALTER TABLE test_results ADD COLUMN aborted INTEGER'); } catch { /* already exists */ }
+  try { getDb().exec('ALTER TABLE test_results ADD COLUMN abort_comment TEXT'); } catch { /* already exists */ }
 }
 
 function seedDefaultUsers(): void {
@@ -173,7 +177,7 @@ export function getPatient(id: string): { patient: RawPatient; results: RawTestR
   const results = (getDb().prepare(`
     SELECT id, patient_id, test_id, date, examiner,
            encrypted_raw_values, encrypted_calculated_values, encrypted_percentile_ranks,
-           norm_info, domain_mapping, note, created_by, updated_at
+           norm_info, domain_mapping, note, aborted, abort_comment, created_by, updated_at
     FROM test_results WHERE patient_id = ?
     ORDER BY date DESC, updated_at DESC
   `).all(id) as Array<Record<string, unknown>>).map(rowToRawTestResult);
@@ -253,11 +257,11 @@ export function saveResult(patientId: string, result: TestResultPayload, created
       INSERT INTO test_results
         (id, patient_id, test_id, date, examiner, encrypted_raw_values,
          encrypted_calculated_values, encrypted_percentile_ranks,
-         norm_info, domain_mapping, note, created_by)
+         norm_info, domain_mapping, note, aborted, abort_comment, created_by)
       VALUES
         (@id, @patientId, @testId, @date, @examiner, @encryptedRawValues,
          @encryptedCalculatedValues, @encryptedPercentileRanks,
-         @normInfo, @domainMapping, @note, @createdBy)
+         @normInfo, @domainMapping, @note, @aborted, @abortComment, @createdBy)
     `).run({
       id: result.id,
       patientId,
@@ -270,6 +274,8 @@ export function saveResult(patientId: string, result: TestResultPayload, created
       normInfo: result.normInfo ?? null,
       domainMapping: result.domainMapping ?? null,
       note: result.note ?? null,
+      aborted: result.aborted ?? null,
+      abortComment: result.abortComment ?? null,
       createdBy: createdBy ?? null,
     });
     // Touch patient updated_at so patient list sorts correctly
@@ -289,7 +295,7 @@ export function updateResult(patientId: string, result: TestResultPayload): bool
         encrypted_calculated_values = @encryptedCalculatedValues,
         encrypted_percentile_ranks = @encryptedPercentileRanks,
         norm_info = @normInfo, domain_mapping = @domainMapping,
-        note = @note, updated_at = unixepoch()
+        note = @note, aborted = @aborted, abort_comment = @abortComment, updated_at = unixepoch()
       WHERE id = @id AND patient_id = @patientId
     `).run({
       id: result.id,
@@ -303,6 +309,8 @@ export function updateResult(patientId: string, result: TestResultPayload): bool
       normInfo: result.normInfo ?? null,
       domainMapping: result.domainMapping ?? null,
       note: result.note ?? null,
+      aborted: result.aborted ?? null,
+      abortComment: result.abortComment ?? null,
     });
     getDb().prepare('UPDATE patients SET updated_at = unixepoch() WHERE id = ?').run(patientId);
     return true;
@@ -451,6 +459,8 @@ function rowToRawTestResult(row: Record<string, unknown>): RawTestResult {
     normInfo: (row.norm_info as string | null) ?? null,
     domainMapping: (row.domain_mapping as string | null) ?? null,
     note: (row.note as string | null) ?? null,
+    aborted: (row.aborted as number | null) ?? null,
+    abortComment: (row.abort_comment as string | null) ?? null,
     createdBy: (row.created_by as string | null) ?? null,
     updatedAt: row.updated_at as number,
   };

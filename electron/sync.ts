@@ -61,6 +61,8 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
     try { serverDb.exec('ALTER TABLE test_results ADD COLUMN domain_mapping TEXT'); } catch { /* already exists */ }
     try { serverDb.exec('ALTER TABLE test_results ADD COLUMN note TEXT'); } catch { /* already exists */ }
     try { serverDb.exec('ALTER TABLE test_results ADD COLUMN created_by TEXT'); } catch { /* already exists */ }
+    try { serverDb.exec('ALTER TABLE test_results ADD COLUMN aborted INTEGER'); } catch { /* already exists */ }
+    try { serverDb.exec('ALTER TABLE test_results ADD COLUMN abort_comment TEXT'); } catch { /* already exists */ }
     // users
     try { serverDb.exec('ALTER TABLE users ADD COLUMN updated_at INTEGER NOT NULL DEFAULT (unixepoch())'); } catch { /* already exists */ }
 
@@ -120,11 +122,11 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
         INSERT OR IGNORE INTO test_results (
           id, patient_id, test_id, date, examiner,
           encrypted_raw_values, encrypted_calculated_values, encrypted_percentile_ranks,
-          norm_info, domain_mapping, note, created_by, created_at, updated_at)
+          norm_info, domain_mapping, note, aborted, abort_comment, created_by, created_at, updated_at)
         SELECT
           id, patient_id, test_id, date, examiner,
           encrypted_raw_values, encrypted_calculated_values, encrypted_percentile_ranks,
-          norm_info, domain_mapping, note, created_by, created_at, updated_at
+          norm_info, domain_mapping, note, aborted, abort_comment, created_by, created_at, updated_at
         FROM local.test_results WHERE created_at >= ?
       `).run(pullTime).changes;
 
@@ -132,11 +134,11 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
         INSERT OR REPLACE INTO test_results (
           id, patient_id, test_id, date, examiner,
           encrypted_raw_values, encrypted_calculated_values, encrypted_percentile_ranks,
-          norm_info, domain_mapping, note, created_by, created_at, updated_at)
+          norm_info, domain_mapping, note, aborted, abort_comment, created_by, created_at, updated_at)
         SELECT
           lr.id, lr.patient_id, lr.test_id, lr.date, lr.examiner,
           lr.encrypted_raw_values, lr.encrypted_calculated_values, lr.encrypted_percentile_ranks,
-          lr.norm_info, lr.domain_mapping, lr.note, lr.created_by, lr.created_at, lr.updated_at
+          lr.norm_info, lr.domain_mapping, lr.note, lr.aborted, lr.abort_comment, lr.created_by, lr.created_at, lr.updated_at
         FROM local.test_results lr
         INNER JOIN test_results sr ON lr.id = sr.id
         WHERE lr.updated_at > sr.updated_at

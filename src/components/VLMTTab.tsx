@@ -125,8 +125,11 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     const e: Record<string, string> = {};
     const required = ['Dg1','Dg2','Dg3','Dg4','Dg5','Dg6','Dg7','I','W'] as const;
     for (const f of required) {
+      // Leere Felder sind bei Teil-/Abbruch-Speicherung erlaubt — nur ausgefüllte
+      // Felder müssen im gültigen Bereich liegen.
+      if (inputs[f] === '') continue;
       const v = Number(inputs[f]);
-      if (inputs[f] === '' || isNaN(v) || v < 0 || v > 15) e[f] = `0–15`;
+      if (isNaN(v) || v < 0 || v > 15) e[f] = `0–15`;
     }
     if (inputs.FP_B !== '') {
       const v = Number(inputs.FP_B);
@@ -174,7 +177,11 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
   };
 
   const handleSave = () => {
-    if (!aborted && (!validate() || !allRequired)) return;
+    // Wie bei den anderen Tests: ein leerer Datensatz wird nur bei explizitem Abbruch
+    // gespeichert, ein teilweise ausgefüllter Datensatz IMMER (nicht erst, wenn auch
+    // "Test abgebrochen" angeklickt wurde) — sonst geht der bis dahin erreichte
+    // Lernverlauf beim Speichern kommentarlos verloren.
+    if (!validate() || (!aborted && !anyValue)) return;
 
     let calcVals: Record<string, number | string> = {};
     let prs: Record<string, number | string> = {};
@@ -188,7 +195,7 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
       calcVals = prResult.calculated;
       prs = prResult.prs;
       normInfoStr = prResult.normInfo;
-    } else if (aborted && partialResult) {
+    } else if (partialResult) {
       calcVals = partialResult.calculated;
       prs = partialResult.prs;
       normInfoStr = partialResult.normInfo;

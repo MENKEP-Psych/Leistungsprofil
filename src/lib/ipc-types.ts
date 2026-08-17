@@ -29,6 +29,8 @@ export interface RawTestResult {
   normInfo: string | null;
   domainMapping: string | null;
   note: string | null;
+  aborted: number | null;
+  abortComment: string | null;
   createdBy: string | null;
   updatedAt: number;
 }
@@ -74,6 +76,8 @@ export interface TestResultPayload {
   normInfo?: string;
   domainMapping?: string | null;
   note?: string | null;
+  aborted?: number | null;
+  abortComment?: string | null;
 }
 
 export interface LoginResult {

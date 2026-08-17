@@ -108,8 +108,12 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     setExaminer(res.examiner ?? '');
     // Ältere Datensätze kennen nur EINE gemeinsame Notiz (res.note) für A+B — als
     // Ausgangswert für beide Felder übernehmen, bis sie einzeln überschrieben wird.
-    setNoteA(res.rawValues.noteA != null ? String(res.rawValues.noteA) : (res.note ?? ''));
-    setNoteB(res.rawValues.noteB != null ? String(res.rawValues.noteB) : (res.note ?? ''));
+    // Nur echte Alt-Datensätze (weder noteA noch noteB gesetzt) dürfen auf res.note
+    // zurückfallen — sonst würde eine nur für Teil B eingegebene Notiz auch bei Teil A
+    // erscheinen (und umgekehrt).
+    const legacySingleNote = res.rawValues.noteA == null && res.rawValues.noteB == null;
+    setNoteA(res.rawValues.noteA != null ? String(res.rawValues.noteA) : (legacySingleNote ? (res.note ?? '') : ''));
+    setNoteB(res.rawValues.noteB != null ? String(res.rawValues.noteB) : (legacySingleNote ? (res.note ?? '') : ''));
     setErrors({});
     setAborted(res.aborted ?? false);
     setAbortComment(res.abortComment ?? '');
