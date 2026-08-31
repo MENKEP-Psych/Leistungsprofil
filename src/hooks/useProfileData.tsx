@@ -29,21 +29,41 @@ interface VLMTMeasure {
   label: string;
   domain: string;
   getDetail: (r: TestResult) => string;
+  // Ob für diese Messung ein Rohwert vorliegt — unabhängig davon, ob der PR
+  // bereits berechnet werden konnte (z. B. weil eine Wiederholungstestung noch
+  // nicht vollständig ist). Ein vorhandener Rohwert soll die Zeile immer sichtbar
+  // machen, auch ohne PR.
+  hasRaw: (r: TestResult) => boolean;
 }
+
+const hasVal = (v: unknown) => v != null && String(v).trim() !== '';
 
 // Reihenfolge: Dg1-5, Σ | I | Dg6, Δ5-6 | Dg7, Δ5-7 | W, W_F
 const VLMT_MEASURES: VLMTMeasure[] = [
-  { key: 'Dg1',      label: 'Supraspanne [1]',                domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Dg1: ${r.rawValues.Dg1}` },
-  { key: 'Dg5',      label: 'Lernleistung [5]',               domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Dg5: ${r.rawValues.Dg5}` },
-  { key: 'sumDg1_5', label: 'Gesamtlernleistung [Σ1–5]',      domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Σ: ${r.calculatedValues.sumDg1_5}` },
-  { key: 'I',        label: 'Interferenzliste [I]',            domain: '2. Gedächtnis (Interferenz)',    getDetail: r => `I: ${r.rawValues.I}` },
-  { key: 'Dg6',      label: 'Abruf n. Interferenz [6]',       domain: '2. Gedächtnis (Kurzzeit)',       getDetail: r => `Dg6: ${r.rawValues.Dg6}` },
-  { key: 'Dg5_Dg6',  label: 'Verlust n. Interferenz [Δ5–6]',  domain: '2. Gedächtnis (Kurzzeit)',       getDetail: r => `Δ: ${r.calculatedValues.Dg5_Dg6}` },
-  { key: 'Dg7',      label: 'Verzögerter Abruf [7]',          domain: '2. Gedächtnis (Langzeit)',       getDetail: r => `Dg7: ${r.rawValues.Dg7}` },
-  { key: 'Dg5_Dg7',  label: 'Verlust n. Verzögerung [Δ5–7]',  domain: '2. Gedächtnis (Langzeit)',       getDetail: r => `Δ: ${r.calculatedValues.Dg5_Dg7}` },
-  { key: 'W',        label: 'Richtig [WR]',                   domain: '2. Gedächtnis (Wiedererkennen)', getDetail: r => `W: ${r.rawValues.W}` },
-  { key: 'W_F',      label: 'Korr. Wiedererkennen [WR–FP]',   domain: '2. Gedächtnis (Wiedererkennen)', getDetail: r => `W_F: ${r.rawValues.W_F ?? '–'}` },
+  { key: 'Dg1',      label: 'Supraspanne [1]',                domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Dg1: ${r.rawValues.Dg1}`,       hasRaw: r => hasVal(r.rawValues.Dg1) },
+  { key: 'Dg5',      label: 'Lernleistung [5]',               domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Dg5: ${r.rawValues.Dg5}`,       hasRaw: r => hasVal(r.rawValues.Dg5) },
+  { key: 'sumDg1_5', label: 'Gesamtlernleistung [Σ1–5]',      domain: '2. Gedächtnis (Lernen)',         getDetail: r => `Σ: ${r.calculatedValues.sumDg1_5}`, hasRaw: r => hasVal(r.calculatedValues.sumDg1_5) },
+  { key: 'I',        label: 'Interferenzliste [I]',            domain: '2. Gedächtnis (Interferenz)',    getDetail: r => `I: ${r.rawValues.I}`,           hasRaw: r => hasVal(r.rawValues.I) },
+  { key: 'Dg6',      label: 'Abruf n. Interferenz [6]',       domain: '2. Gedächtnis (Kurzzeit)',       getDetail: r => `Dg6: ${r.rawValues.Dg6}`,       hasRaw: r => hasVal(r.rawValues.Dg6) },
+  { key: 'Dg5_Dg6',  label: 'Verlust n. Interferenz [Δ5–6]',  domain: '2. Gedächtnis (Kurzzeit)',       getDetail: r => `Δ: ${r.calculatedValues.Dg5_Dg6}`, hasRaw: r => hasVal(r.calculatedValues.Dg5_Dg6) },
+  { key: 'Dg7',      label: 'Verzögerter Abruf [7]',          domain: '2. Gedächtnis (Langzeit)',       getDetail: r => `Dg7: ${r.rawValues.Dg7}`,       hasRaw: r => hasVal(r.rawValues.Dg7) },
+  { key: 'Dg5_Dg7',  label: 'Verlust n. Verzögerung [Δ5–7]',  domain: '2. Gedächtnis (Langzeit)',       getDetail: r => `Δ: ${r.calculatedValues.Dg5_Dg7}`, hasRaw: r => hasVal(r.calculatedValues.Dg5_Dg7) },
+  { key: 'W',        label: 'Richtig [WR]',                   domain: '2. Gedächtnis (Wiedererkennen)', getDetail: r => `W: ${r.rawValues.W}`,           hasRaw: r => hasVal(r.rawValues.W) },
+  { key: 'W_F',      label: 'Korr. Wiedererkennen [WR–FP]',   domain: '2. Gedächtnis (Wiedererkennen)', getDetail: r => `W_F: ${r.rawValues.W_F ?? '–'}`, hasRaw: r => hasVal(r.rawValues.W_F) },
 ];
+
+// Normalisiert einen aktuellen PR-Wert: `undefined` und leere Strings (z. B. aus
+// Alt-Datensätzen, bei denen ein TAP-PR-Feld nie ausgefüllt wurde) werden auf das
+// App-weite "kein PR"-Sentinel 'n/a' abgebildet, statt `undefined` durchzureichen —
+// sonst rendert PRProfile den Punkt fälschlich bei PR 50 bzw. als "abgebrochen".
+const prOrNA = (v: string | number | undefined): string | number =>
+  (v === undefined || (typeof v === 'string' && v.trim() === '')) ? 'n/a' : v;
+
+// Normalisiert einen Vorher-PR-Wert für die History-Marker: `undefined`, leere
+// Strings und das 'n/a'-Sentinel werden alle zu `undefined`, damit kein History-Punkt
+// gezeichnet wird, wenn für die vorherige Messung kein Normwert vorlag.
+const prevPrOrUndef = (v: string | number | undefined): string | number | undefined =>
+  (v === undefined || (typeof v === 'string' && (v.trim() === '' || v.trim() === 'n/a'))) ? undefined : v;
 
 // Combines notes from the latest and previous test sessions.
 // If both have notes, the previous one is prefixed with its date.
@@ -109,23 +129,33 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
 
       // Ein als "abgebrochen" markierter Datensatz zählt für beide Teile (auch ohne
       // Werte) mit, damit ein komplett abgebrochener Test weiterhin als n/a erscheint.
+      // Ebenso zählt eine für den jeweiligen Teil eingetragene Notiz (z. B. „TMT-B
+      // wegen Farbfehlsichtigkeit nicht durchführbar") mit — sonst würde diese
+      // Erklärung im Leistungsprofil nie auftauchen, weil ohne Zeit-Wert keine Zeile
+      // für den Teil erzeugt wird.
       const tmtSessionsFor = (part: 'A' | 'B') =>
-        tmtResults.filter(r => (r.rawValues[part] != null && String(r.rawValues[part]).trim() !== '') || r.aborted);
+        tmtResults.filter(r =>
+          (r.rawValues[part] != null && String(r.rawValues[part]).trim() !== '')
+          || hasVal(r.rawValues[part === 'A' ? 'noteA' : 'noteB'])
+          || r.aborted);
 
       const latestA = tmtSessionsFor('A')[0];
       if (latestA) {
         const previousA = tmtSessionsFor('A')[1];
         data.push({
           label: 'TMT Teil A',
-          currentPr: latestA.percentileRanks.A ?? (latestA.aborted ? 'n/a' : undefined),
-          previousPr: previousA?.percentileRanks.A,
+          // Bei "abgebrochen" nie einen (ggf. dennoch berechneten) Prozentrang zeigen —
+          // der Test gilt als nicht valide durchgeführt, unabhängig davon, ob aus dem
+          // eingegebenen Rohwert rechnerisch ein PR ermittelt werden könnte.
+          currentPr: latestA.aborted ? 'n/a' : prOrNA(latestA.percentileRanks.A),
+          previousPr: prevPrOrUndef(previousA?.percentileRanks.A),
           date: latestA.date,
           prevDate: previousA?.date,
           domain: latestA.domainMapping?.A ?? DEFAULT_DOMAINS['tmt-A'],
           subdomain: '1.1 Informationsverarbeitungsgeschwindigkeit',
           testGroup: 'Trail Making Test',
-          details: [`Zeit: ${latestA.rawValues.A}s`],
-          previousDetails: previousA ? [`Zeit: ${previousA.rawValues.A}s`] : undefined,
+          details: hasVal(latestA.rawValues.A) ? [`Zeit: ${latestA.rawValues.A}s`] : undefined,
+          previousDetails: previousA && hasVal(previousA.rawValues.A) ? [`Zeit: ${previousA.rawValues.A}s`] : undefined,
           note: combineTmtNotes(latestA, previousA, 'A'),
           ...abt(latestA),
           ...pabt(previousA),
@@ -136,15 +166,15 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const previousB = tmtSessionsFor('B')[1];
         data.push({
           label: 'TMT Teil B',
-          currentPr: latestB.percentileRanks.B ?? (latestB.aborted ? 'n/a' : undefined),
-          previousPr: previousB?.percentileRanks.B,
+          currentPr: latestB.aborted ? 'n/a' : prOrNA(latestB.percentileRanks.B),
+          previousPr: prevPrOrUndef(previousB?.percentileRanks.B),
           date: latestB.date,
           prevDate: previousB?.date,
           domain: latestB.domainMapping?.B ?? DEFAULT_DOMAINS['tmt-B'],
           subdomain: '1.4 Geteilte Aufmerksamkeit',
           testGroup: 'Trail Making Test',
-          details: [`Zeit: ${latestB.rawValues.B}s`],
-          previousDetails: previousB ? [`Zeit: ${previousB.rawValues.B}s`] : undefined,
+          details: hasVal(latestB.rawValues.B) ? [`Zeit: ${latestB.rawValues.B}s`] : undefined,
+          previousDetails: previousB && hasVal(previousB.rawValues.B) ? [`Zeit: ${previousB.rawValues.B}s`] : undefined,
           note: combineTmtNotes(latestB, previousB, 'B'),
           ...abt(latestB),
           ...pabt(previousB),
@@ -163,15 +193,31 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const vlmtVersionLabel = VLMT_VERSION_OPTIONS.find(o => o.value === latest.rawValues.version)?.label;
         const vlmtTestGroup = vlmtVersionLabel ? `VLMT – ${vlmtVersionLabel}` : 'VLMT';
 
+        // Abgebrochen und kein einziger Rohwert erfasst (z. B. „Test nicht durchführbar,
+        // Grund siehe Notiz") → nur EINE Sammelzeile mit der Begründung, statt 10 leere
+        // „k.A."-Zeilen.
+        const vlmtNoRaw = latest.aborted && !VLMT_MEASURES.some(m => m.hasRaw(latest));
+        if (vlmtNoRaw) {
+          data.push({
+            label: 'VLMT',
+            currentPr: 'n/a',
+            date: latest.date,
+            domain: '2. Gedächtnis (Lernen)',
+            subdomain: '2.3 Verbale Lern- und Merkfähigkeit',
+            testGroup: vlmtTestGroup,
+            note: combineNotes(latest, previous),
+            ...abt(latest),
+          });
+        }
+
         for (const m of VLMT_MEASURES) {
+          if (vlmtNoRaw) break;
           const currPr = latest.percentileRanks[m.key];
-          if (currPr === undefined && !latest.aborted) continue;
+          if (currPr === undefined && !latest.aborted && !m.hasRaw(latest)) continue;
           data.push({
             label: m.label,
-            currentPr: currPr ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks[m.key] !== 'n/a'
-              ? previous?.percentileRanks[m.key]
-              : undefined,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(currPr),
+            previousPr: prevPrOrUndef(previous?.percentileRanks[m.key]),
             date: latest.date,
             prevDate: previous?.date,
             domain: m.domain,
@@ -198,30 +244,33 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
 
         data.push({
           label: 'Turm von London (alterskorrigiert)',
-          currentPr: latest.percentileRanks.alterkorrigiert ?? (latest.aborted ? 'n/a' : undefined),
-          previousPr: previous?.percentileRanks.alterkorrigiert,
+          // Bei "abgebrochen" nie einen (ggf. dennoch berechneten) Prozentrang zeigen —
+          // der Test gilt als nicht valide durchgeführt.
+          currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.alterkorrigiert),
+          previousPr: prevPrOrUndef(previous?.percentileRanks.alterkorrigiert),
           date: latest.date,
           prevDate: previous?.date,
           domain: '5. Exekutive Funktionen',
           testGroup: 'Turm von London',
           details: [detailStr(latest)],
           previousDetails: previous ? [detailStr(previous)] : undefined,
-          note: latest.note,
+          note: combineNotes(latest, previous),
           ...abt(latest),
           ...pabt(previous),
         });
 
-        if (latest.percentileRanks.alter_bildung !== undefined) {
+        if (latest.percentileRanks.alter_bildung !== undefined || latest.aborted) {
           data.push({
             label: 'Turm von London (alters- & bildungskorrigiert)',
-            currentPr: latest.percentileRanks.alter_bildung,
-            previousPr: previous?.percentileRanks.alter_bildung,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.alter_bildung),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.alter_bildung),
             date: latest.date,
             prevDate: previous?.date,
             domain: '5. Exekutive Funktionen',
             testGroup: 'Turm von London',
             details: [detailStr(latest)],
             previousDetails: previous ? [detailStr(previous)] : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -290,19 +339,27 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         arbeitsgedaechtnis: ['ag_fehler_pr', 'ag_ausl_pr'],
       };
 
+      // 'n/a' zählt hier wie ein leerer Wert — seit `best()` (TAPTab.tsx) für „kein PR"
+      // konsequent das Sentinel 'n/a' statt eines leeren Strings liefert, ist JEDES
+      // TAP-Kennwertfeld mindestens 'n/a' (also ein wahrheitswertig nicht-leerer String).
+      // Ohne diesen Ausschluss würde jede Messung als „vorhanden" durchgehen, selbst wenn
+      // rein gar nichts eingetragen wurde.
+      const tapNoValue = (v: unknown) => v == null || String(v).trim() === '' || String(v).trim() === 'n/a';
+
       // Helper: for a given accessor, find sessions with a non-empty value, newest first
       const tapSessionsFor = <T,>(accessor: (r: TestResult) => T | undefined) =>
-        tapResults.filter(r => { const v = accessor(r); return !!v && String(v).trim() !== ''; });
+        tapResults.filter(r => !tapNoValue(accessor(r)));
 
-      // Wie tapSessionsFor, aber eine abgebrochene Sitzung zählt zusätzlich mit, wenn zwar
-      // kein Normwert vorliegt, aber mindestens einer der angegebenen Rohwert-Felder bereits
-      // ausgefüllt wurde — so erscheint bei Abbruch nur die tatsächlich begonnene Messung als
-      // "k.A."-Zeile mit Rohwert, statt entweder gar nichts oder gleich alle ~30 TAP-Messungen.
-      const tapSessionsForAllowAborted = (accessor: (r: TestResult) => unknown, ...rawKeys: (string | undefined)[]) =>
+      // Wie tapSessionsFor, aber eine Sitzung zählt zusätzlich mit, wenn zwar kein Normwert
+      // vorliegt, aber mindestens einer der angegebenen Rohwert-Felder bereits ausgefüllt
+      // wurde (unabhängig davon, ob die Sitzung als "abgebrochen" markiert ist — ein einzeln
+      // eingetragener Rohwert, dessen PR noch nicht nachgetragen wurde, soll ebenfalls sofort
+      // als "k.A."-Zeile mit Rohwert erscheinen) — so erscheint nur die tatsächlich begonnene
+      // Messung, statt entweder gar nichts oder gleich alle ~30 TAP-Messungen.
+      const tapSessionsForAllowRawOnly = (accessor: (r: TestResult) => unknown, ...rawKeys: (string | undefined)[]) =>
         tapResults.filter(r => {
-          const v = accessor(r);
-          if (!!v && String(v).trim() !== '') return true;
-          return !!r.aborted && rawKeys.some(k => k != null && r.rawValues[k] != null && String(r.rawValues[k]).trim() !== '');
+          if (!tapNoValue(accessor(r))) return true;
+          return rawKeys.some(k => k != null && !tapNoValue(r.rawValues[k]));
         });
 
       // TAP Erst/Abschluss: Eingangstestung (e_) = „vorher", Abschlusstestung (b_) = „aktuell".
@@ -371,12 +428,21 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         vigilanz: 'note_vig', arbeitsgedaechtnis: 'note_ag',
         neg_pr: 'note_neg',
       };
-      const tapNote = (r: TestResult, key: string): string | undefined => {
-        const field = TAP_NOTE_FIELD[key];
+      // Führt die Anmerkung eines TAP-Untertests aus der aktuellen und der vorherigen
+      // Sitzung zusammen (analog combineNotes) — bei getrennten Wiederholungsmessungen
+      // soll der Kommentar aus beiden Sitzungen sichtbar bleiben, nicht nur der neueste.
+      const combineTapNoteField = (latest: TestResult, previous: TestResult | undefined, field: string | undefined): string | undefined => {
         if (!field) return undefined;
-        const v = String(r.rawValues[field] ?? '').trim();
-        return v || undefined;
+        const a = String(latest.rawValues[field] ?? '').trim();
+        const b = previous ? String(previous.rawValues[field] ?? '').trim() : '';
+        if (!a && !b) return undefined;
+        if (!b) return a || undefined;
+        if (!a) return `[${formatDate(previous!.date)}] ${b}`;
+        if (a === b) return a;
+        return `${a}\n[${formatDate(previous!.date)}] ${b}`;
       };
+      const tapNote = (r: TestResult, key: string, previous?: TestResult): string | undefined =>
+        combineTapNoteField(r, previous, TAP_NOTE_FIELD[key]);
       // Liefert aktuelles + vorheriges Datum: bei In-Sitzungs-Paar Abschluss-/Eingangsdatum,
       // sonst das (Abschluss-bevorzugte) Datum der jeweiligen Sitzung.
       const tapRowDates = (base: string | undefined, lt: TestResult, pv: TestResult | undefined, inSession: boolean): { date: string; prevDate?: string } => {
@@ -397,7 +463,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           // Per-metric: find all sessions that actually have a value for this metric
           // (oder bei Abbruch zumindest einen erfassten Rohwert für dieses Maß).
           const mainRawKey = TAP_MAIN_RT[m.key]?.rawKey;
-          const sessions = tapSessionsForAllowAborted(
+          const sessions = tapSessionsForAllowRawOnly(
             r => r.percentileRanks[m.key],
             mainRawKey, mainRawKey ? `b_${mainRawKey}` : undefined,
           );
@@ -405,7 +471,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           const latest   = sessions[0];
           const previous = sessions[1];
 
-          const currPr = latest.percentileRanks[m.key] ?? (latest.aborted ? 'n/a' : undefined)!;
+          const currPr = prOrNA(latest.percentileRanks[m.key]);
           // „vorher" = Eingangstestung der aktuellen Sitzung, nur wenn auch Abschluss vorhanden
           const eb = TAP_MAIN_EB[m.key];
           const erstVal      = eb ? latest.rawValues[eb.e] : undefined;
@@ -431,7 +497,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
 
           const olderMainPrs = olderArr
             .map(r => r.percentileRanks[m.key])
-            .filter((v): v is string | number => !!v && String(v).trim() !== '');
+            .filter((v): v is string | number => !!v && String(v).trim() !== '' && String(v).trim() !== 'n/a');
 
           // Median-/RT-Rohwert als Detailzeile (Abschluss bevorzugt, Eingang als „vorher").
           const rt = TAP_MAIN_RT[m.key];
@@ -450,7 +516,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           data.push({
             label: m.label,
             currentPr: currPr,
-            previousPr: (prevPr && String(prevPr).trim() !== '') ? prevPr : undefined,
+            previousPr: prevPrOrUndef(prevPr),
             previousPrs: olderMainPrs.length > 0 ? olderMainPrs : undefined,
             date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, hasInSession).date,
             prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, hasInSession).prevDate,
@@ -460,7 +526,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             tapVersion,
             details: mainDetails,
             previousDetails: mainPrevDetails,
-            note: tapNote(latest, m.key),
+            note: tapNote(latest, m.key, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -473,32 +539,33 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
               const sdErst      = latest.rawValues[sdDef.key];
               const sdAbschluss = latest.rawValues[`b_${sdDef.key}`];
               const sdCurrPr = tapTrim(sdAbschluss) ? sdAbschluss : sdErst;
-              // Rohwert (ms) folgt derselben Eingang/Abschluss-Präferenz wie der PR (sdCurrPr) —
-              // sonst fehlt der Rohwert, wenn nur die Abschluss-/Wiederholungstestung ausgefüllt ist.
               const sdRawErst      = latest.rawValues[sdDef.rawKey];
               const sdRawAbschluss = latest.rawValues[`b_${sdDef.rawKey}`];
               const sdHasRaw = tapTrim(sdRawErst) || tapTrim(sdRawAbschluss);
-              if ((sdCurrPr && String(sdCurrPr).trim() !== '') || (latest.aborted && sdHasRaw)) {
-                const sdPrevPr = (tapTrim(sdAbschluss) && tapTrim(sdErst)) ? sdErst : previous?.rawValues[sdDef.key];
-                const sdRaw = tapTrim(sdAbschluss) ? sdRawAbschluss : sdRawErst;
-                // „vorher"-Rohwert: Eingang derselben Sitzung, sonst der Rohwert der vorherigen Sitzung.
-                const sdPrevRaw = (tapTrim(sdAbschluss) && tapTrim(sdErst)) ? sdRawErst : previous?.rawValues[sdDef.rawKey];
+              if ((sdCurrPr && String(sdCurrPr).trim() !== '') || sdHasRaw) {
+                // Eingang/Abschluss-Zuordnung richtet sich nach den ROHWERT-Feldern, nicht nach
+                // den PR-Feldern — sonst verschwindet der Abschluss-Rohwert einer Wiederholungs-
+                // testung, solange nur der (oft erst später nachgetragene) PR noch fehlt.
+                const sdHasInSession = tapTrim(sdRawAbschluss) && tapTrim(sdRawErst);
+                const sdPrevPr = sdHasInSession ? sdErst : previous?.rawValues[sdDef.key];
+                const sdRaw = tapTrim(sdRawAbschluss) ? sdRawAbschluss : sdRawErst;
+                const sdPrevRaw = sdHasInSession ? sdRawErst : previous?.rawValues[sdDef.rawKey];
                 const olderSdPrs = olderArr
                   .map(r => r.rawValues[sdDef.key])
-                  .filter((v): v is string | number => !!v && String(v).trim() !== '');
+                  .filter((v): v is string | number => !!v && String(v).trim() !== '' && String(v).trim() !== 'n/a');
                 data.push({
                   label: sdDef.label,
                   currentPr: sdCurrPr && String(sdCurrPr).trim() !== '' ? sdCurrPr : 'n/a',
-                  previousPr: (sdPrevPr && String(sdPrevPr).trim() !== '') ? sdPrevPr : undefined,
+                  previousPr: prevPrOrUndef(sdPrevPr),
                   previousPrs: olderSdPrs.length > 0 ? olderSdPrs : undefined,
-                  date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(sdAbschluss) && tapTrim(sdErst)).date,
-                  prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(sdAbschluss) && tapTrim(sdErst)).prevDate,
+                  date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, sdHasInSession).date,
+                  prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, sdHasInSession).prevDate,
                   domain: m.domain,
                   subdomain: TAP_SUBDOMAIN[m.key],
                   testGroup: 'TAP',
                   details: sdRaw ? [`SD: ${sdRaw} ${sdDef.unit}`] : undefined,
                   previousDetails: tapTrim(sdPrevRaw) ? [`SD: ${sdPrevRaw} ${sdDef.unit}`] : undefined,
-                  note: tapNote(latest, m.key),
+                  note: tapNote(latest, m.key, previous),
                   ...abt(latest),
                   ...pabt(previous),
                 });
@@ -513,31 +580,33 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             const fCurrPr = latest.percentileRanks[fk as keyof typeof latest.percentileRanks];
             const fErst      = latest.rawValues[`e_${fk}`];
             const fAbschluss = latest.rawValues[`b_${fk}`];
-            // Rohwert (Anzahl) folgt derselben Eingang/Abschluss-Präferenz wie der PR (fCurrPr) —
-            // sonst fehlt der Rohwert, wenn nur die Abschluss-/Wiederholungstestung ausgefüllt ist.
             const rawValErst      = latest.rawValues[fDef.rawKey];
             const rawValAbschluss = latest.rawValues[`b_${fDef.rawKey}`];
             const fHasRaw = tapTrim(rawValErst) || tapTrim(rawValAbschluss);
-            if ((!fCurrPr || String(fCurrPr).trim() === '') && !(latest.aborted && fHasRaw)) continue;
-            const fPrevPr = (tapTrim(fAbschluss) && tapTrim(fErst)) ? fErst : previous?.percentileRanks[fk as keyof typeof latest.percentileRanks];
-            const rawVal = tapTrim(fAbschluss) ? rawValAbschluss : rawValErst;
-            const fPrevRaw = (tapTrim(fAbschluss) && tapTrim(fErst)) ? rawValErst : previous?.rawValues[fDef.rawKey];
+            if (tapNoValue(fCurrPr) && !fHasRaw) continue;
+            // Eingang/Abschluss-Zuordnung richtet sich nach den ROHWERT-Feldern, nicht nach
+            // den PR-Feldern — sonst verschwindet der Abschluss-Rohwert einer Wiederholungs-
+            // testung, solange nur der (oft erst später nachgetragene) PR noch fehlt.
+            const fHasInSession = tapTrim(rawValAbschluss) && tapTrim(rawValErst);
+            const fPrevPr = fHasInSession ? fErst : previous?.percentileRanks[fk as keyof typeof latest.percentileRanks];
+            const rawVal = tapTrim(rawValAbschluss) ? rawValAbschluss : rawValErst;
+            const fPrevRaw = fHasInSession ? rawValErst : previous?.rawValues[fDef.rawKey];
             const olderFPrs = olderArr
               .map(r => r.percentileRanks[fk as keyof typeof r.percentileRanks])
-              .filter((v): v is string | number => !!v && String(v).trim() !== '');
+              .filter((v): v is string | number => !!v && String(v).trim() !== '' && String(v).trim() !== 'n/a');
             data.push({
               label: fDef.label,
-              currentPr: (fCurrPr && String(fCurrPr).trim() !== '') ? fCurrPr : 'n/a',
-              previousPr: (fPrevPr && String(fPrevPr).trim() !== '') ? fPrevPr : undefined,
+              currentPr: tapNoValue(fCurrPr) ? 'n/a' : fCurrPr,
+              previousPr: prevPrOrUndef(fPrevPr),
               previousPrs: olderFPrs.length > 0 ? olderFPrs : undefined,
-              date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(fAbschluss) && tapTrim(fErst)).date,
-              prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, tapTrim(fAbschluss) && tapTrim(fErst)).prevDate,
+              date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, fHasInSession).date,
+              prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, fHasInSession).prevDate,
               domain: m.domain,
               subdomain: TAP_SUBDOMAIN[m.key],
               testGroup: 'TAP',
               details: rawVal != null && rawVal !== '' ? [`Wert: ${rawVal}`] : undefined,
               previousDetails: tapTrim(fPrevRaw) ? [`Wert: ${fPrevRaw}`] : undefined,
-              note: tapNote(latest, m.key),
+              note: tapNote(latest, m.key, previous),
               ...abt(latest),
               ...pabt(previous),
             });
@@ -549,33 +618,33 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       const TAP_VE_SUBDOMAIN = '6.1 Visuelles Scanning';
       if (tapResults.length > 0) {
         for (const m of TAP_VE_PR_MAP) {
-          const sessions = tapSessionsForAllowAborted(r => r.percentileRanks[m.key], m.rawKey, `b_${m.rawKey}`);
+          const sessions = tapSessionsForAllowRawOnly(r => r.percentileRanks[m.key], m.rawKey, `b_${m.rawKey}`);
           if (sessions.length === 0) continue;
           const latest   = sessions[0];
           const previous = sessions[1];
 
-          const currPr = latest.percentileRanks[m.key] ?? (latest.aborted ? 'n/a' : undefined)!;
+          const currPr = prOrNA(latest.percentileRanks[m.key]);
           const veEb = TAP_VE_EB[m.key];
           const veErst      = veEb ? latest.rawValues[veEb.e] : undefined;
           const veAbschluss = veEb ? latest.rawValues[veEb.b] : undefined;
-          // wie bei den Hauptmaßen: Eingang derselben Sitzung, sonst die zweitneueste separate Messung.
-          const hasInSession = tapTrim(veAbschluss) && tapTrim(veErst);
-          const prevPr = hasInSession ? veErst : previous?.percentileRanks[m.key];
-          const olderArr = hasInSession ? sessions.slice(1) : sessions.slice(2);
-          // Rohwert folgt derselben Eingang/Abschluss-Präferenz wie der PR (currPr) —
-          // sonst fehlt der Rohwert, wenn nur die Wiederholungstestung ausgefüllt ist.
           const veRawErst      = latest.rawValues[m.rawKey];
           const veRawAbschluss = latest.rawValues[`b_${m.rawKey}`];
-          const rawVal = tapTrim(veAbschluss) ? veRawAbschluss : veRawErst;
+          // Eingang/Abschluss-Zuordnung richtet sich nach den ROHWERT-Feldern, nicht nach
+          // den PR-Feldern — sonst verschwindet der Abschluss-Rohwert einer Wiederholungs-
+          // testung, solange nur der (oft erst später nachgetragene) PR noch fehlt.
+          const hasInSession = tapTrim(veRawAbschluss) && tapTrim(veRawErst);
+          const prevPr = hasInSession ? veErst : previous?.percentileRanks[m.key];
+          const olderArr = hasInSession ? sessions.slice(1) : sessions.slice(2);
+          const rawVal = tapTrim(veRawAbschluss) ? veRawAbschluss : veRawErst;
           const vePrevRaw = hasInSession ? veRawErst : previous?.rawValues[m.rawKey];
           const veIsTapM = String(latest.rawValues.ve_ver ?? '') === 'M';
           const olderVePrs = olderArr
             .map(r => r.percentileRanks[m.key])
-            .filter((v): v is string | number => !!v && String(v).trim() !== '');
+            .filter((v): v is string | number => !!v && String(v).trim() !== '' && String(v).trim() !== 'n/a');
           data.push({
             label: m.label,
             currentPr: currPr,
-            previousPr: (prevPr && String(prevPr).trim() !== '') ? prevPr : undefined,
+            previousPr: prevPrOrUndef(prevPr),
             previousPrs: olderVePrs.length > 0 ? olderVePrs : undefined,
             date: tapRowDates('ve', latest, previous, hasInSession).date,
             prevDate: tapRowDates('ve', latest, previous, hasInSession).prevDate,
@@ -585,7 +654,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             tapVersion: veIsTapM ? 'M' : '2.3',
             details: rawVal ? [`Wert: ${rawVal}${m.unit ? ' ' + m.unit : ''}`] : undefined,
             previousDetails: tapTrim(vePrevRaw) ? [`Wert: ${vePrevRaw}${m.unit ? ' ' + m.unit : ''}`] : undefined,
-            note: String(latest.rawValues.note_ve ?? '').trim() || undefined,
+            note: combineTapNoteField(latest, previous, 'note_ve'),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -633,11 +702,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           const sdOnlyPrevRaw = hasInSession ? undefined : previous?.rawValues[m.rawKey];
           const olderSdOnlyPrs = olderArr
             .map(r => r.rawValues[m.key])
-            .filter((v): v is string | number => !!v && String(v).trim() !== '');
+            .filter((v): v is string | number => !!v && String(v).trim() !== '' && String(v).trim() !== 'n/a');
           data.push({
             label: m.label,
             currentPr: currPr,
-            previousPr: (prevPr && String(prevPr).trim() !== '') ? prevPr : undefined,
+            previousPr: prevPrOrUndef(prevPr),
             previousPrs: olderSdOnlyPrs.length > 0 ? olderSdOnlyPrs : undefined,
             date: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, hasInSession).date,
             prevDate: tapRowDates(TAP_DATE_BASE[m.key], latest, previous, hasInSession).prevDate,
@@ -646,7 +715,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             testGroup: 'TAP – Standardabweichungen',
             details: rawVal ? [`SD: ${rawVal} ${m.unit}`] : undefined,
             previousDetails: tapTrim(sdOnlyPrevRaw) ? [`SD: ${sdOnlyPrevRaw} ${m.unit}`] : undefined,
-            note: (() => { const nf = TAP_SD_NOTE_FIELD[m.key]; return nf ? (String(latest.rawValues[nf] ?? '').trim() || undefined) : undefined; })(),
+            note: combineTapNoteField(latest, previous, TAP_SD_NOTE_FIELD[m.key]),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -664,11 +733,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const latest   = wmsResults[0];
         const previous = wmsResults[1];
 
-        if (latest.percentileRanks.sofortiger_abruf !== undefined || latest.aborted) {
+        if (latest.percentileRanks.sofortiger_abruf !== undefined || latest.aborted || hasVal(latest.rawValues.sofortig)) {
           data.push({
             label: 'Sofortiger Abruf',
-            currentPr: latest.percentileRanks.sofortiger_abruf ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.sofortiger_abruf,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.sofortiger_abruf),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.sofortiger_abruf),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Visuell)',
@@ -684,11 +753,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           });
         }
 
-        if (latest.percentileRanks.verzoegerter_abruf !== undefined || latest.aborted) {
+        if (latest.percentileRanks.verzoegerter_abruf !== undefined || latest.aborted || hasVal(latest.rawValues.verzoegert)) {
           data.push({
             label: 'Verzögerter Abruf',
-            currentPr: latest.percentileRanks.verzoegerter_abruf ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.verzoegerter_abruf,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.verzoegerter_abruf),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.verzoegerter_abruf),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Visuell)',
@@ -698,16 +767,17 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             previousDetails: previous?.rawValues.verzoegert !== undefined
               ? [`RW: ${previous.rawValues.verzoegert}, WP: ${previous.calculatedValues.verzoegert_wp ?? '–'}`]
               : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
         }
 
-        if (latest.percentileRanks.wiedererkennen !== undefined || latest.aborted) {
+        if (latest.percentileRanks.wiedererkennen !== undefined || latest.aborted || hasVal(latest.rawValues.wiedererkennen)) {
           data.push({
             label: 'Wiedererkennen',
-            currentPr: latest.percentileRanks.wiedererkennen ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.wiedererkennen,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.wiedererkennen),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.wiedererkennen),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Visuell)',
@@ -717,6 +787,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             previousDetails: previous?.rawValues.wiedererkennen !== undefined
               ? [`RW: ${previous.rawValues.wiedererkennen}`]
               : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -738,11 +809,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         ] as const;
         for (const s of ROCFT_SCALES) {
           const currPr = latest.percentileRanks[s.key];
-          if ((currPr === undefined || currPr === 'n/a') && !latest.aborted) continue;
+          if ((currPr === undefined || currPr === 'n/a') && !latest.aborted && !hasVal(latest.rawValues[s.rawKey])) continue;
           data.push({
             label: s.label,
-            currentPr: currPr ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks[s.key] !== 'n/a' ? previous?.percentileRanks[s.key] : undefined,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(currPr),
+            previousPr: prevPrOrUndef(previous?.percentileRanks[s.key]),
             date: latest.date,
             prevDate: previous?.date,
             domain: '3. Visuo-Perz. / Visuo-Konstr.',
@@ -764,11 +835,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       if (ZZT_ENABLED && zztResults.length > 0) {
         const latest   = zztResults[0];
         const previous = zztResults[1];
-        if (latest.percentileRanks.zzt !== undefined || latest.aborted) {
+        if (latest.percentileRanks.zzt !== undefined || latest.aborted || hasVal(latest.rawValues.median) || hasVal(latest.rawValues.rohwert)) {
           data.push({
             label: 'ZZT (Median)',
-            currentPr: latest.percentileRanks.zzt ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.zzt,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.zzt),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.zzt),
             date: latest.date,
             prevDate: previous?.date,
             domain: '1. Aufmerksamkeit',
@@ -797,7 +868,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         // Fallback: recalculate PR from rawValues if not stored (e.g. old results with null-PR rohwerts)
         const resolveZSPR = (res: typeof latest, dir: 'vorwaerts' | 'rueckwaerts', age: number) => {
           const stored = res.percentileRanks[dir];
-          if (stored !== undefined) return stored;
+          if (stored !== undefined && String(stored).trim() !== '') return stored;
           const raw = res.rawValues[dir];
           if (raw == null || raw === '') return undefined;
           const calc = lookupZahlenspanne(Number(raw), age, dir);
@@ -809,11 +880,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const pvwPR  = previous && prevAge != null ? resolveZSPR(previous, 'vorwaerts',  prevAge) : undefined;
         const prkPR  = previous && prevAge != null ? resolveZSPR(previous, 'rueckwaerts', prevAge) : undefined;
 
-        if (vwPR !== undefined || latest.aborted) {
+        if (vwPR !== undefined || latest.aborted || hasVal(latest.rawValues.vorwaerts)) {
           data.push({
             label: 'Zahlenspanne vorwärts (WMS-R)',
-            currentPr: vwPR ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: pvwPR,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(vwPR),
+            previousPr: prevPrOrUndef(pvwPR),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Kurzzeitgedächtnis)',
@@ -827,11 +898,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           });
         }
 
-        if (rkPR !== undefined || latest.aborted) {
+        if (rkPR !== undefined || latest.aborted || hasVal(latest.rawValues.rueckwaerts)) {
           data.push({
             label: 'Zahlenspanne rückwärts (WMS-R)',
-            currentPr: rkPR ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: prkPR,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(rkPR),
+            previousPr: prevPrOrUndef(prkPR),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Arbeitsgedächtnis)',
@@ -839,6 +910,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             testGroup: 'Zahlenspanne',
             details: [`RW: ${latest.rawValues.rueckwaerts ?? '–'}`],
             previousDetails: previous ? [`RW: ${previous.rawValues.rueckwaerts ?? '–'}`] : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -854,11 +926,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const latest   = blockspanneResults[0];
         const previous = blockspanneResults[1];
 
-        if (latest.percentileRanks.vorwaerts !== undefined || latest.aborted) {
+        if (latest.percentileRanks.vorwaerts !== undefined || latest.aborted || hasVal(latest.rawValues.vorwaerts)) {
           data.push({
             label: 'Blockspanne vorwärts (WMS-R)',
-            currentPr: latest.percentileRanks.vorwaerts ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.vorwaerts,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.vorwaerts),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.vorwaerts),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Kurzzeitgedächtnis)',
@@ -872,11 +944,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           });
         }
 
-        if (latest.percentileRanks.rueckwaerts !== undefined || latest.aborted) {
+        if (latest.percentileRanks.rueckwaerts !== undefined || latest.aborted || hasVal(latest.rawValues.rueckwaerts)) {
           data.push({
             label: 'Blockspanne rückwärts (WMS-R)',
-            currentPr: latest.percentileRanks.rueckwaerts ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.rueckwaerts,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.rueckwaerts),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.rueckwaerts),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Arbeitsgedächtnis)',
@@ -884,6 +956,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             testGroup: 'Blockspanne',
             details: [`RW: ${latest.rawValues.rueckwaerts ?? '–'}`],
             previousDetails: previous ? [`RW: ${previous.rawValues.rueckwaerts ?? '–'}`] : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
@@ -899,11 +972,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const latest   = lgResults[0];
         const previous = lgResults[1];
 
-        if (latest.percentileRanks.lgI !== undefined || latest.aborted) {
+        if (latest.percentileRanks.lgI !== undefined || latest.aborted || hasVal(latest.rawValues.lgI)) {
           data.push({
             label: 'Log. Gedächtnis I (Sofort)',
-            currentPr: latest.percentileRanks.lgI ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.lgI,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.lgI),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.lgI),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Lernen)',
@@ -917,11 +990,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           });
         }
 
-        if (latest.percentileRanks.lgII !== undefined || latest.aborted) {
+        if (latest.percentileRanks.lgII !== undefined || latest.aborted || hasVal(latest.rawValues.lgII)) {
           data.push({
             label: 'Log. Gedächtnis II (Verzögert)',
-            currentPr: latest.percentileRanks.lgII ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.lgII,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.lgII),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.lgII),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Langzeit)',
@@ -929,16 +1002,17 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             testGroup: 'Logisches Gedächtnis (WMS-IV)',
             details: [`RW: ${latest.rawValues.lgII ?? '–'}`],
             previousDetails: previous ? [`RW: ${previous.rawValues.lgII ?? '–'}`] : undefined,
+            note: combineNotes(latest, previous),
             ...abt(latest),
             ...pabt(previous),
           });
         }
 
-        if (latest.percentileRanks.wiedererk !== undefined || latest.aborted) {
+        if (latest.percentileRanks.wiedererk !== undefined || latest.aborted || hasVal(latest.rawValues.wiedererk)) {
           data.push({
             label: 'Log. Gedächtnis Wiedererkennen',
-            currentPr: latest.percentileRanks.wiedererk ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.wiedererk,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.wiedererk),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.wiedererk),
             date: latest.date,
             prevDate: previous?.date,
             domain: '2. Gedächtnis (Wiedererkennen)',
@@ -961,11 +1035,11 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
       if (mosaikResults.length > 0) {
         const latest   = mosaikResults[0];
         const previous = mosaikResults[1];
-        if (latest.percentileRanks.mosaik !== undefined || latest.aborted) {
+        if (latest.percentileRanks.mosaik !== undefined || latest.aborted || hasVal(latest.rawValues.rohwert)) {
           data.push({
             label: 'Mosaik-Test',
-            currentPr: latest.percentileRanks.mosaik ?? (latest.aborted ? 'n/a' : undefined),
-            previousPr: previous?.percentileRanks.mosaik,
+            currentPr: latest.aborted ? 'n/a' : prOrNA(latest.percentileRanks.mosaik),
+            previousPr: prevPrOrUndef(previous?.percentileRanks.mosaik),
             date: latest.date,
             prevDate: previous?.date,
             domain: '3. Visuo-Perz. / Visuo-Konstr.',
@@ -995,9 +1069,13 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         const lpsTestGroup = lpsVersionLabel
           ? `LPS – ${lpsVersionLabel}${lps50FormLabel ? ` (${lps50FormLabel})` : ''}`
           : 'LPS';
+        let lpsRowCount = 0;
         for (const s of LPS_SUBTESTS) {
-          // All sessions that recorded a PR value for this subtest, newest first
-          const withData = lpsResults.filter(r => r.percentileRanks[s.id] !== undefined);
+          // Alle Sitzungen mit PR ODER bereits eingetragenem Rohwert für diesen Subtest,
+          // neueste zuerst — ein Rohwert ohne (noch) berechneten PR soll trotzdem erscheinen.
+          const withData = lpsResults.filter(r =>
+            r.percentileRanks[s.id] !== undefined || hasVal(r.rawValues[`${s.id}_rw`]),
+          );
           if (withData.length === 0) continue;
 
           const latest   = withData[0];
@@ -1014,8 +1092,8 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
 
           data.push({
             label: s.label,
-            currentPr: latest.percentileRanks[s.id],
-            previousPr: previous?.percentileRanks[s.id],
+            currentPr: prOrNA(latest.percentileRanks[s.id]),
+            previousPr: prevPrOrUndef(previous?.percentileRanks[s.id]),
             date: latest.date,
             prevDate: previous?.date,
             domain: '4. Intellektuelle Leistungen',
@@ -1030,6 +1108,20 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
                 .filter(Boolean).join('  ') || undefined,
             ].filter(Boolean) as string[] : undefined,
             note: combineNotes(latest, previous),
+          });
+          lpsRowCount++;
+        }
+
+        // Abgebrochen und kein Subtest erfasst → eine Sammelzeile mit der Begründung.
+        if (lpsRowCount === 0 && lpsResults[0].aborted) {
+          data.push({
+            label: 'LPS',
+            currentPr: 'n/a',
+            date: lpsResults[0].date,
+            domain: '4. Intellektuelle Leistungen',
+            testGroup: lpsTestGroup,
+            note: combineNotes(lpsResults[0], lpsResults[1]),
+            ...abt(lpsResults[0]),
           });
         }
       }

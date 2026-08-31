@@ -408,6 +408,26 @@ ipcMain.handle('dialog:savePdf', async (_, filename: string, bytes: number[]) =>
   writePdf(filename, Buffer.from(bytes)),
 );
 
+// Fehlerbericht-Export: anonymisierten Fall als JSON-Datei speichern. Fragt
+// IMMER nach dem Speicherort (anders als writePdf, das einen konfigurierten
+// Ordner überspringen kann) — der Nutzer soll bei jedem Bericht bewusst
+// entscheiden, wohin die Datei geht. Default: Desktop des angemeldeten Windows-Nutzers.
+ipcMain.handle('dialog:saveJson', async (_, filename: string, content: string) => {
+  const defaultDir = app.getPath('desktop');
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: 'Fehlerbericht speichern',
+    defaultPath: path.join(defaultDir, filename),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return { success: false, canceled: true };
+  try {
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 // Vector PDF export: render the print-optimised profile in a hidden window and
 // capture it with webContents.printToPDF (selectable text, crisp lines, legend
 // on every page). The window fetches the patient itself via the db IPC.
@@ -452,6 +472,70 @@ ipcMain.handle('pdf:exportProfile', async (_evt, patientId: string, filename: st
     const pdf = await win.webContents.printToPDF({
       printBackground: true,
       preferCSSPageSize: true, // honour @page size + margins from print.css
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate:
+        '<div style="font-size:8px; width:100%; padding:0 10mm; text-align:right; color:#64748b; font-family: Arial, sans-serif;">Seite <span class="pageNumber"></span> / <span class="totalPages"></span></div>',
+    });
+
+    return await writePdf(filename, pdf);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    win.destroy();
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF Experimental — full copy of the pdf:exportProfile handler above.
+//
+// Independent export pipeline so the experimental PDF layout can be reworked
+// without risking the production export. Only difference: it loads the hidden
+// window with `?print=exp` (→ PrintProfileAppExperimental + print-experimental.css).
+// The low-level writePdf / PDF-folder plumbing is shared on purpose.
+// See src/lib/featureFlags.ts (PDF_EXPERIMENTAL_ENABLED) for the full file list.
+// ─────────────────────────────────────────────────────────────────────────────
+ipcMain.handle('pdf:exportProfileExperimental', async (_evt, patientId: string, filename: string) => {
+  const win = new BrowserWindow({
+    show: false,
+    width: 900,
+    height: 1400,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  try {
+    // Resolve once the print window signals its layout + fonts have settled.
+    const ready = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        ipcMain.removeListener('print:ready', onReady);
+        reject(new Error('Zeitüberschreitung beim Rendern des PDFs'));
+      }, 8000);
+      const onReady = (e: IpcMainEvent) => {
+        if (e.sender !== win.webContents) return; // ignore signals from other windows
+        clearTimeout(timeout);
+        ipcMain.removeListener('print:ready', onReady);
+        resolve();
+      };
+      ipcMain.on('print:ready', onReady);
+    });
+
+    if (isDev) {
+      await win.loadURL(`http://localhost:3000/?print=exp&patient=${encodeURIComponent(patientId)}`);
+    } else {
+      await win.loadFile(path.join(__dirname, '../../dist/index.html'), {
+        query: { print: 'exp', patient: patientId },
+      });
+    }
+
+    await ready;
+
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true, // honour @page size + margins from print-experimental.css
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
       footerTemplate:

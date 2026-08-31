@@ -7,6 +7,29 @@ import { cn, formatDate, calculateAge } from '../lib/utils';
 
 const noSpinner = 'appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
+// ── "Notiz ohne Messwerte" beim Speichern ─────────────────────────────────────
+// Wird ein Test-Formular ohne einen einzigen Messwert und ohne gesetztes
+// „abgebrochen"-Flag gespeichert, aber MIT einer eingetragenen Notiz, dann ist
+// das fast immer der Fall „Test konnte nicht durchgeführt werden, Grund steht in
+// der Notiz". Früher hat `handleSave` in diesem Fall stillschweigend gar nichts
+// gespeichert — die Notiz ging verloren und im Leistungsprofil tauchte nichts
+// auf. Statt dessen wird jetzt nachgefragt und das Ergebnis auf Wunsch als
+// Abbruch mit der Notiz als Begründung gespeichert.
+export const NOTE_ONLY_SAVE_PROMPT =
+  'Es wurden keine Messwerte eingegeben.\n\n'
+  + 'Soll der Test als „nicht durchgeführt / abgebrochen" gespeichert werden und '
+  + 'die eingegebene Notiz als Begründung übernommen werden?';
+
+/**
+ * Entscheidet, was ein `handleSave` ohne Messwerte tun soll:
+ * - Notiz vorhanden  → fragt nach; bei Bestätigung als Abbruch speichern.
+ * - keine Notiz      → nichts speichern (wie bisher).
+ */
+export function resolveNoteOnlySave(noteText: string): 'save-aborted' | 'cancel' {
+  if (noteText.trim() && window.confirm(NOTE_ONLY_SAVE_PROMPT)) return 'save-aborted';
+  return 'cancel';
+}
+
 // ── PR color coding ───────────────────────────────────────────────────────────
 
 export function prColorCls(pr: number | string): string {

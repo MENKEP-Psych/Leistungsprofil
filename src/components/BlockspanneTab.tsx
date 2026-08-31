@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupBlockspanne } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 interface BlockspanneTabProps {
   patient: Patient;
@@ -94,7 +94,15 @@ export const BlockspanneTab: React.FC<BlockspanneTabProps> = ({ patient, previou
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && vwVal === null && rkVal === null) return;
+    // Ohne Messwerte und ohne „abgebrochen": entweder Notiz-als-Abbruch speichern
+    // (nach Rückfrage) oder – wie bisher – nichts tun.
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && vwVal === null && rkVal === null) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     const rawValues: Record<string, number | string> = {};
     if (vwVal !== null) rawValues.vorwaerts = vwVal;
@@ -107,7 +115,9 @@ export const BlockspanneTab: React.FC<BlockspanneTabProps> = ({ patient, previou
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
       testId: 'blockspanne',
-      date, examiner, note, rawValues,
+      date, examiner,
+      note: effAborted && !aborted ? '' : note,
+      rawValues,
       calculatedValues: {},
       percentileRanks: prs,
       normInfo: 'WMS-R Blockspanne (VM 3) – Alterskorrigierte Normtabelle (© 2002 Ulrich Goertz)',
@@ -115,8 +125,8 @@ export const BlockspanneTab: React.FC<BlockspanneTabProps> = ({ patient, previou
         vorwaerts: '2. Gedächtnis (Merkspanne)',
         rueckwaerts: '2. Gedächtnis (Arbeitsgedächtnis)',
       },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

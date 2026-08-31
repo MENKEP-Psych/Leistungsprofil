@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { calculateVLMTPR, calculateVLMTPRPartial } from '../lib/vlmt';
-import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning } from './TestForm';
+import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
 
 interface VLMTTabProps {
   patient: Patient;
@@ -181,7 +181,14 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
     // gespeichert, ein teilweise ausgefüllter Datensatz IMMER (nicht erst, wenn auch
     // "Test abgebrochen" angeklickt wurde) — sonst geht der bis dahin erreichte
     // Lernverlauf beim Speichern kommentarlos verloren.
-    if (!validate() || (!aborted && !anyValue)) return;
+    if (!validate()) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && !anyValue) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     let calcVals: Record<string, number | string> = {};
     let prs: Record<string, number | string> = {};
@@ -224,9 +231,9 @@ export const VLMTTab: React.FC<VLMTTabProps> = ({ patient, previousResults, onSa
       percentileRanks: prs,
       normInfo: normInfoStr,
       examiner,
-      note,
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      note: effAborted && !aborted ? '' : note,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

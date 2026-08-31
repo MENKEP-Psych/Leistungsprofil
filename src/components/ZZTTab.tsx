@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupZZT } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 interface ZZTTabProps {
   patient: Patient;
@@ -69,7 +69,13 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
 
   const handleSave = () => {
     const filled = parsedTimes.filter(t => t !== null);
-    if (!aborted && filled.length === 0) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && filled.length === 0) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     const rawValues: Record<string, number | string> = {};
     ROUNDS.forEach((r, i) => {
@@ -84,14 +90,14 @@ export const ZZTTab: React.FC<ZZTTabProps> = ({ patient, previousResults, onSave
       testId: 'zzt',
       date,
       examiner,
-      note,
+      note: effAborted && !aborted ? '' : note,
       rawValues,
-      calculatedValues: { wp },
-      percentileRanks: { zzt: pr },
+      calculatedValues: filled.length > 0 ? { wp } : {},
+      percentileRanks: filled.length > 0 ? { zzt: pr } : {},
       normInfo: 'TME Zahlen-Zeige-Test (ZZT) – Gesamtnorm',
       domainMapping: { zzt: '1. Aufmerksamkeit (Informationsverarbeitung)' },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

@@ -254,7 +254,11 @@ const emptyCol = (user: string): ColData => ({
 
 const encodeCol = (col: ColData): TestResult => {
   const f = col.f;
-  const best = (b: string, e: string) => b.trim() ? b : e;
+  // Liefert das App-weite "kein PR"-Sentinel 'n/a' statt eines leeren Strings,
+  // wenn weder Abschluss- noch Eingangs-PR eingetragen ist — ein leerer String
+  // würde downstream (z. B. `?? 'n/a'`) nicht als "kein PR" erkannt und fälschlich
+  // als Wert PR 50 gerendert.
+  const best = (b: string, e: string): string => (b.trim() ? b : e.trim() ? e : 'n/a');
 
   return {
     id: col.id ?? Date.now().toString(),

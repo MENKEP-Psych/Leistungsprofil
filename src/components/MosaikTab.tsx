@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupMosaik } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 interface MosaikTabProps {
   patient: Patient;
@@ -85,17 +85,24 @@ export const MosaikTab: React.FC<MosaikTabProps> = ({ patient, previousResults, 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && mosaikVal === null) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && mosaikVal === null) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'mosaik', date, examiner, note,
+      testId: 'mosaik', date, examiner,
+      note: effAborted && !aborted ? '' : note,
       rawValues: mosaikVal !== null ? { rohwert: mosaikVal } : {},
       calculatedValues: mosaikNorm ? { awp: mosaikNorm.awp } : {},
       percentileRanks:  mosaikNorm ? { mosaik: mosaikNorm.pr } : {},
       normInfo: 'WIE Mosaik-Test [MT 2a] – Normtabelle',
       domainMapping: { mosaik: '3. Visuo-Perz. / Visuo-Konstr. Leistungen' },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);

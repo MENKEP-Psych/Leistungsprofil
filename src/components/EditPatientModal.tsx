@@ -86,7 +86,15 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       setDeleteCount(0);
       setDeleteXOffset(0);
     }
-  }, [patient, isOpen]);
+  // Bewusst nur an `patient.id` (nicht am ganzen `patient`-Objekt) hängen: das
+  // Patienten-Objekt wird bei jedem Hintergrund-Sync / jeder Ergebnis-Änderung
+  // neu erzeugt (u. a. weil `age` frisch berechnet wird). Hing der Effekt am
+  // ganzen Objekt, lief er mitten im Bearbeiten erneut und überschrieb noch nicht
+  // gespeicherte Eingaben mit den Serverwerten (z. B. „Bildungsjahre 10" sprang
+  // zurück auf „6"). Die Formularwerte werden jetzt nur beim Öffnen bzw. beim
+  // Wechsel auf einen anderen Patienten neu geladen.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id, isOpen]);
 
   // Reset delete button position when confirm panel opens
   useEffect(() => {

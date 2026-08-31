@@ -49,6 +49,20 @@ function decodeDiagnoseLokalisation(
   return { diagnose, lokalisation };
 }
 
+// "Sitzung beenden": Notiz + geplante testIds für die nächste Sitzung.
+function decodeNextSession(
+  row: RawPatient,
+  encryptionKey: string,
+): { nextSessionNote?: string; nextSessionTestIds?: string[] } {
+  const note = row.encryptedNextSessionNote
+    ? (decryptData(row.encryptedNextSessionNote, encryptionKey) as string) || undefined
+    : undefined;
+  const testIds = row.encryptedNextSessionTests
+    ? (decryptData(row.encryptedNextSessionTests, encryptionKey) as string[])
+    : undefined;
+  return { nextSessionNote: note, nextSessionTestIds: Array.isArray(testIds) ? testIds : undefined };
+}
+
 // ── Runtime detection ─────────────────────────────────────────────────────────
 
 export function isElectron(): boolean {
@@ -131,6 +145,7 @@ export async function fetchPatient(
       ? (decryptData(row.encryptedEntlassdatum, encryptionKey) as string) || undefined
       : undefined,
     ...decodeDiagnoseLokalisation(row, encryptionKey),
+    ...decodeNextSession(row, encryptionKey),
     status: row.status as 'aktiv' | 'entlassen',
     age: calculateAge((decryptData(row.encryptedGeburtsdatum, encryptionKey) as string) || '', sorted[0]?.date),
     createdBy: row.createdBy ?? undefined,
@@ -167,7 +182,7 @@ export async function dbCreatePatient(p: Patient, encryptionKey: string, created
 
 export async function dbUpdatePatient(
   id: string,
-  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'mitarbeiter' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>,
+  updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'mitarbeiter' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation' | 'nextSessionNote' | 'nextSessionTestIds'>>,
   encryptionKey: string
 ): Promise<boolean> {
   if (!isElectron()) return updatePatientLocal(id, updates);
@@ -186,6 +201,8 @@ export async function dbUpdatePatient(
   if ('entlassdatum' in updates) payload.encryptedEntlassdatum = updates.entlassdatum ? encryptData(updates.entlassdatum, encryptionKey) as string : null;
   if ('diagnose' in updates) payload.encryptedDiagnose = updates.diagnose && updates.diagnose.length > 0 ? encryptData(updates.diagnose, encryptionKey) as string : null;
   if ('lokalisation' in updates) payload.encryptedLokalisation = updates.lokalisation && Object.keys(updates.lokalisation).length > 0 ? encryptData(updates.lokalisation, encryptionKey) as string : null;
+  if ('nextSessionNote' in updates) payload.encryptedNextSessionNote = updates.nextSessionNote ? encryptData(updates.nextSessionNote, encryptionKey) as string : null;
+  if ('nextSessionTestIds' in updates) payload.encryptedNextSessionTests = updates.nextSessionTestIds && updates.nextSessionTestIds.length > 0 ? encryptData(updates.nextSessionTestIds, encryptionKey) as string : null;
   return getElectronAPI().updatePatient(id, payload);
 }
 
@@ -462,11 +479,24 @@ export async function dbSavePdf(filename: string, bytes: number[]) {
   return getElectronAPI().savePdf(filename, bytes);
 }
 
+export async function dbSaveJson(filename: string, content: string) {
+  if (!isElectron()) return { success: false, error: 'Nur in der Desktop-App verfügbar' };
+  return getElectronAPI().saveJson(filename, content);
+}
+
 // Render the print-optimised profile in a hidden window and export it as a
 // vector PDF (Electron only). Returns { success, filePath } or { success:false }.
 export async function dbExportProfilePdf(patientId: string, filename: string) {
   if (!isElectron()) return { success: false, error: 'Not in Electron' };
   return getElectronAPI().exportProfilePdf(patientId, filename);
+}
+
+// PDF Experimental — forked copy of dbExportProfilePdf. Runs through the fully
+// independent experimental export pipeline (see src/lib/featureFlags.ts,
+// PDF_EXPERIMENTAL_ENABLED). Electron only, no screenshot fallback.
+export async function dbExportProfilePdfExperimental(patientId: string, filename: string) {
+  if (!isElectron()) return { success: false, error: 'Not in Electron' };
+  return getElectronAPI().exportProfilePdfExperimental(patientId, filename);
 }
 
 // Print window → main: signal that the print layout has finished rendering.

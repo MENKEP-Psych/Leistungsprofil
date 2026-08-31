@@ -14,6 +14,10 @@ export interface Patient {
   /** Lokalisations-Auswahl je Diagnose (Diagnose-Text → serialisierte Gruppen-Auswahl). */
   lokalisation?: Record<string, string>;
   createdBy?: string;
+  /** Notiz zur nächsten Sitzung, gesetzt über "Sitzung beenden" im Leistungsprofil-Tab. */
+  nextSessionNote?: string;
+  /** Ids der für die nächste Sitzung geplanten Test-Slots (s. STANDARD_TESTS/REST_TESTS). */
+  nextSessionTestIds?: string[];
 }
 
 export interface AuditEntry {

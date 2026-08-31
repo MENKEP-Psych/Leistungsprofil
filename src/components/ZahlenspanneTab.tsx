@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupZahlenspanne } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 interface ZahlenspanneTabProps {
   patient: Patient;
@@ -94,7 +94,15 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && vwVal === null && rkVal === null) return;
+    // Ohne Messwerte und ohne „abgebrochen": entweder Notiz-als-Abbruch speichern
+    // (nach Rückfrage) oder – wie bisher – nichts tun.
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && vwVal === null && rkVal === null) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     const rawValues: Record<string, number | string> = {};
     if (vwVal !== null) rawValues.vorwaerts = vwVal;
@@ -107,7 +115,11 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
       testId: 'zahlenspanne',
-      date, examiner, note, rawValues,
+      date, examiner,
+      // Bei „Notiz als Abbruch" wandert der Text in abortComment, damit er im
+      // Leistungsprofil nicht doppelt (unter dem Label und auf dem Balken) steht.
+      note: effAborted && !aborted ? '' : note,
+      rawValues,
       calculatedValues: {},
       percentileRanks: prs,
       normInfo: 'WMS-R Zahlenspanne [ZN 3] – Normtabelle',
@@ -115,8 +127,8 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
         vorwaerts: '2. Gedächtnis (Merkspanne)',
         rueckwaerts: '2. Gedächtnis (Arbeitsgedächtnis)',
       },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

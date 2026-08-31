@@ -7,7 +7,7 @@ import { formatDate, calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import tmtNorms from '../data/tmt-norms.json';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
 import { lookupTMTPR } from '../lib/tmtUtils';
 
 interface TMTTabProps {
@@ -129,7 +129,20 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
   };
 
   const handleSave = () => {
-    if (!aborted && !validate()) return;
+    // Kein Teil ausgefüllt, aber eine Notiz für A/B eingetragen → nachfragen und
+    // ggf. als Abbruch mit der Notiz als Begründung speichern (statt die Notiz
+    // beim Speichern kommentarlos zu verwerfen).
+    const bothEmpty = rawA.trim() === '' && rawB.trim() === '';
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    const promptedAbort = !aborted && bothEmpty
+      && resolveNoteOnlySave([noteA.trim(), noteB.trim()].filter(Boolean).join(' · ')) === 'save-aborted';
+    if (promptedAbort) {
+      effAborted = true;
+      effAbortComment = [noteA.trim(), noteB.trim()].filter(Boolean).join(' · ');
+    } else if (!aborted && !validate()) {
+      return;
+    }
 
     const hasA = rawA !== '' && !isNaN(Number(rawA)) && Number(rawA) > 0;
     const hasB = rawB !== '' && !isNaN(Number(rawB)) && Number(rawB) > 0;
@@ -156,8 +169,11 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     if (errA.trim() && !isNaN(Number(errA))) rawValues.errA = Number(errA);
     if (errB.trim() && !isNaN(Number(errB))) rawValues.errB = Number(errB);
     // Teil A und B haben je eine eigene Notiz (ersetzt die frühere gemeinsame `note`).
-    if (noteA.trim()) rawValues.noteA = noteA;
-    if (noteB.trim()) rawValues.noteB = noteB;
+    // Bei „Notiz als Abbruch" wandert der Text nur in abortComment.
+    if (!promptedAbort) {
+      if (noteA.trim()) rawValues.noteA = noteA;
+      if (noteB.trim()) rawValues.noteB = noteB;
+    }
 
     const group = tmtNorms.altersgruppen.find(g => ageAtTest >= g.von && ageAtTest <= g.bis);
 
@@ -170,13 +186,13 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
       percentileRanks: prs,
       normInfo: `Norm: ${group?.label ?? 'Unbekannt'}, ${tmtNorms.meta.quelle}`,
       examiner,
-      note: noteA || noteB || undefined,
+      note: promptedAbort ? undefined : (noteA || noteB || undefined),
       domainMapping: {
         A: '1. Aufmerksamkeit (Geschwindigkeit)',
         B: '1. Aufmerksamkeit (Geteilt)',
       },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

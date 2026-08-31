@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupLGWP, lookupLGPR, lookupLGWiedererkennung } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 interface LGTabProps {
   patient: Patient;
@@ -102,7 +102,13 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && lgIVal === null && lgIIVal === null && wiedererkVal === null) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && lgIVal === null && lgIIVal === null && wiedererkVal === null) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     const rawValues: Record<string, number | string> = {};
     if (lgIVal      !== null) rawValues.lgI      = lgIVal;
@@ -120,7 +126,9 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
 
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'lg', date, examiner, note, rawValues,
+      testId: 'lg', date, examiner,
+      note: effAborted && !aborted ? '' : note,
+      rawValues,
       calculatedValues: calcVals, percentileRanks: prs,
       normInfo: 'WMS-IV Logisches Gedächtnis [LG] – Normtabelle',
       domainMapping: {
@@ -128,8 +136,8 @@ export const LGTab: React.FC<LGTabProps> = ({ patient, previousResults, onSave, 
         lgII: '2. Gedächtnis (Verbale Lern- und Merkfähigkeit)',
         wiedererk: '2. Gedächtnis (Verbale Lern- und Merkfähigkeit)',
       },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

@@ -7,7 +7,7 @@ import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import tolAlterNorms from '../data/tol_normen_alter.json';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
 import { lookupTolAlterPR, lookupTolAlterBildungPR, findTolAltergruppe } from '../lib/tolUtils';
 
 interface TOLTabProps {
@@ -91,7 +91,13 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
   };
 
   const handleSave = () => {
-    if (!aborted && rw === null) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && rw === null) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
 
     const prAlter   = rw !== null ? lookupTolAlterPR(rw, ageAtTest) : undefined;
     const prBildung = rw !== null && hasBildung ? lookupTolAlterBildungPR(rw, ageAtTest, patient.bildungsjahre!) : undefined;
@@ -103,14 +109,15 @@ export const TOLTab: React.FC<TOLTabProps> = ({ patient, previousResults, onSave
 
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'tol', date, examiner, note,
+      testId: 'tol', date, examiner,
+      note: effAborted && !aborted ? '' : note,
       rawValues:        rw !== null ? { rohwert: rw } : {},
       calculatedValues: rw !== null ? { rohwert: rw } : {},
       percentileRanks:  prs,
       normInfo: `Altersgruppe: ${alterGroup?.label ?? 'Unbekannt'}${hasBildung ? `, Bildungsjahre: ${patient.bildungsjahre}` : ''}`,
       domainMapping: { alterkorrigiert: '5. Exekutive Funktionen', alter_bildung: '5. Exekutive Funktionen' },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

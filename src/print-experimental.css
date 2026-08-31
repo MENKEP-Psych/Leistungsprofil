@@ -1,0 +1,101 @@
+/* Print-only stylesheet for the EXPERIMENTAL PDF export — loaded exclusively by
+   the hidden experimental print window (main.tsx `?print=exp` branch). Drives the
+   A4 vector PDF produced by Electron's webContents.printToPDF via the
+   'pdf:exportProfileExperimental' IPC handler.
+
+   This is a full copy of print.css and is deliberately independent: edit it
+   freely to redesign the experimental PDF without touching the production
+   export. See src/lib/featureFlags.ts (PDF_EXPERIMENTAL_ENABLED) for the full
+   list of forked files. */
+
+@page {
+  size: A4;
+  /* Bottom margin leaves room for the printToPDF footerTemplate (page numbers). */
+  margin: 10mm 10mm 14mm 10mm;
+}
+
+html,
+body {
+  background: #ffffff !important;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Report table: <thead> repeats on every printed page ─────────────────── */
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.print-table > thead {
+  /* Repeat the header (patient info + legend) at the top of every page. */
+  display: table-header-group;
+}
+
+.print-table > thead > tr > td,
+.print-table > tbody > tr > td {
+  padding: 0;
+  vertical-align: top;
+}
+
+/* Header block sits above the profile on each page. */
+.print-runhead > tr > td {
+  padding-bottom: 6px !important;
+}
+
+.print-head-inner {
+  background: #ffffff;
+}
+
+/* Report title — flows as normal content (not the repeating thead), so it is
+   only ever printed once, at the top of page 1. */
+.print-report-title {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a; /* slate-900 */
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* ── Page-break control ──────────────────────────────────────────────────── */
+
+/* Never split a single measurement / text row across a page boundary. */
+.pr-row {
+  break-inside: avoid;
+  page-break-inside: avoid; /* legacy alias for older engines */
+}
+
+/* Never split a single Gesichtsfeld-/Neglect-test graphic (one eye, or the
+   Neglect test) across a page boundary. Deliberately NOT applied to the whole
+   measurement session (.pr-neglect-session, which can contain up to four of
+   these graphics) — an unbreakable session block that's taller than the
+   remaining page space forced the renderer to push the *entire* session to
+   the next page, stranding the section heading alone at the bottom of the
+   previous page and leaving a mostly-empty page before the session started.
+   Protecting only the smallest unit lets the browser break between graphics
+   instead. */
+.pr-neglect-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Keep the "Gesichtsfeld- und Neglectprüfung (TAP)" section heading attached
+   to the first measurement session that follows it. */
+.pr-neglect-heading {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* Keep a domain heading attached to the rows that follow it. */
+.pr-chart h3 {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* Avoid orphaning a test-group / subsection label at the foot of a page. */
+.pr-domain {
+  break-before: auto;
+}

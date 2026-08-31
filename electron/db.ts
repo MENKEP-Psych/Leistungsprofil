@@ -109,6 +109,9 @@ function createSchema(): void {
   // ging bei jedem Neuladen verloren (Absturz in PRProfile, siehe TMT/TOL "profile"-Fehler).
   try { getDb().exec('ALTER TABLE test_results ADD COLUMN aborted INTEGER'); } catch { /* already exists */ }
   try { getDb().exec('ALTER TABLE test_results ADD COLUMN abort_comment TEXT'); } catch { /* already exists */ }
+  // "Sitzung beenden": geplante Tests + Notiz für die nächste Sitzung.
+  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_next_session_note TEXT'); } catch { /* already exists */ }
+  try { getDb().exec('ALTER TABLE patients ADD COLUMN encrypted_next_session_tests TEXT'); } catch { /* already exists */ }
 }
 
 function seedDefaultUsers(): void {
@@ -168,7 +171,8 @@ export function getPatient(id: string): { patient: RawPatient; results: RawTestR
     SELECT id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
            encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
            encrypted_aufnahmedatum, encrypted_entlassdatum, encrypted_diagnose, encrypted_lokalisation,
-           status, encrypted_general_note, created_by, created_at, updated_at
+           status, encrypted_general_note, encrypted_next_session_note, encrypted_next_session_tests,
+           created_by, created_at, updated_at
     FROM patients WHERE id = ?
   `).get(id) as Record<string, unknown> | undefined;
 
@@ -235,6 +239,8 @@ export function updatePatient(id: string, updates: PatientUpdatePayload): boolea
   if ('encryptedEntlassdatum' in updates) { sets.push('encrypted_entlassdatum = @encryptedEntlassdatum'); params.encryptedEntlassdatum = updates.encryptedEntlassdatum ?? null; }
   if ('encryptedDiagnose' in updates) { sets.push('encrypted_diagnose = @encryptedDiagnose'); params.encryptedDiagnose = updates.encryptedDiagnose ?? null; }
   if ('encryptedLokalisation' in updates) { sets.push('encrypted_lokalisation = @encryptedLokalisation'); params.encryptedLokalisation = updates.encryptedLokalisation ?? null; }
+  if ('encryptedNextSessionNote' in updates) { sets.push('encrypted_next_session_note = @encryptedNextSessionNote'); params.encryptedNextSessionNote = updates.encryptedNextSessionNote ?? null; }
+  if ('encryptedNextSessionTests' in updates) { sets.push('encrypted_next_session_tests = @encryptedNextSessionTests'); params.encryptedNextSessionTests = updates.encryptedNextSessionTests ?? null; }
   if (updates.status !== undefined) { sets.push('status = @status'); params.status = updates.status; }
 
   if (sets.length === 1) return true; // only updated_at, nothing to do
@@ -439,6 +445,8 @@ function rowToRawPatient(row: Record<string, unknown>): RawPatient {
     encryptedEntlassdatum: (row.encrypted_entlassdatum as string | null) ?? null,
     encryptedDiagnose: (row.encrypted_diagnose as string | null) ?? null,
     encryptedLokalisation: (row.encrypted_lokalisation as string | null) ?? null,
+    encryptedNextSessionNote: (row.encrypted_next_session_note as string | null) ?? null,
+    encryptedNextSessionTests: (row.encrypted_next_session_tests as string | null) ?? null,
     status: row.status as string,
     createdBy: (row.created_by as string | null) ?? null,
     createdAt: row.created_at as number,

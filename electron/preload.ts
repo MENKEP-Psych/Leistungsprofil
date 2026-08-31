@@ -63,7 +63,10 @@ const api: ElectronAPI = {
   getPdfFolder: () => ipcRenderer.invoke('config:getPdfFolder'),
   setPdfFolder: (folder) => ipcRenderer.invoke('config:setPdfFolder', folder),
   savePdf: (filename, bytes) => ipcRenderer.invoke('dialog:savePdf', filename, bytes),
+  saveJson: (filename, content) => ipcRenderer.invoke('dialog:saveJson', filename, content),
   exportProfilePdf: (patientId, filename) => ipcRenderer.invoke('pdf:exportProfile', patientId, filename),
+  // PDF Experimental — forked export pipeline (see src/lib/featureFlags.ts).
+  exportProfilePdfExperimental: (patientId, filename) => ipcRenderer.invoke('pdf:exportProfileExperimental', patientId, filename),
 
   // Print-window → main: signal that the print layout has finished rendering.
   printReady: () => ipcRenderer.send('print:ready'),

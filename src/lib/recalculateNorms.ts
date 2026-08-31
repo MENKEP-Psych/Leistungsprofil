@@ -14,7 +14,7 @@ import {
 import { lookupTolAlterPR, lookupTolAlterBildungPR } from './tolUtils';
 import type { TestResult } from '../types';
 
-function ageAtDate(geburtsdatum: string, testDate: string): number | null {
+export function ageAtDate(geburtsdatum: string, testDate: string): number | null {
   if (!geburtsdatum || !testDate) return null;
   const birth = new Date(geburtsdatum);
   const test  = new Date(testDate);
@@ -169,6 +169,39 @@ function recalcTOL(result: TestResult, age: number, bildungsjahre?: number): Par
 }
 
 const RECALC_SUPPORTED = new Set(['vlmt', 'tmt', 'mosaik', 'zahlenspanne', 'blockspanne', 'lg', 'tol', 'rey', 'wms_vw', 'zzt']);
+
+export function isRecalcSupported(testId: string): boolean {
+  return RECALC_SUPPORTED.has(testId);
+}
+
+/**
+ * Rechnet die Prozentränge eines Ergebnisses frisch aus `rawValues` + Alter nach,
+ * OHNE etwas zu speichern. Für Fehlerberichte: Vergleich „gespeichert ↔ neu
+ * berechnet" deckt veraltete PR (Norm-/Alters-/Geburtsdatum-Änderung seit dem
+ * Speichern) und angewandte Norm-Korrekturen auf.
+ * Gibt `null` zurück, wenn der Test nicht nachrechenbar ist oder die Rohwerte
+ * für eine Neuberechnung nicht ausreichen.
+ */
+export function recomputeResultPRs(
+  result: TestResult,
+  age: number | null,
+  bildungsjahre?: number,
+): Partial<TestResult> | null {
+  if (age === null || !RECALC_SUPPORTED.has(result.testId)) return null;
+  switch (result.testId) {
+    case 'vlmt':         return recalcVLMT(result, age);
+    case 'tmt':          return recalcTMT(result, age);
+    case 'mosaik':       return recalcMosaik(result, age);
+    case 'zahlenspanne': return recalcZahlenspanne(result, age);
+    case 'blockspanne':  return recalcBlockspanne(result, age);
+    case 'lg':           return recalcLG(result, age);
+    case 'tol':          return recalcTOL(result, age, bildungsjahre);
+    case 'rey':          return recalcROCFT(result, age);
+    case 'wms_vw':       return recalcWMS(result, age);
+    case 'zzt':          return recalcZZT(result);
+    default:             return null;
+  }
+}
 
 // ── Main export ───────────────────────────────────────────────────────────────
 

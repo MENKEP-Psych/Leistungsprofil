@@ -8,7 +8,7 @@ import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { calculateROCFTPR } from '../lib/rocft';
 import type { ROCFTPRResult } from '../lib/rocft';
-import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, HistoryDate, OutOfRangeWarning } from './TestForm';
+import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
 
 interface ROCFTTabProps {
   patient: Patient;
@@ -168,7 +168,13 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted && !hasAnyValue) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && !hasAnyValue) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
     const prResult = calculateROCFTPR(ageAtTest, { cft: cftVal, cfm: cfmVal, cqm: cqmVal });
     const rawValues: Record<string, number | string> = {};
     if (cftVal !== null) rawValues.cft = cftVal;
@@ -181,13 +187,15 @@ export const ROCFTTab: React.FC<ROCFTTabProps> = ({ patient, previousResults, on
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
       testId: 'rey',
-      date, examiner, note, rawValues,
+      date, examiner,
+      note: effAborted && !aborted ? '' : note,
+      rawValues,
       calculatedValues: {},
       percentileRanks,
       normInfo: prResult.normInfo,
       domainMapping: { rey: '3. Visuo-Perz. / Visuo-Konstr. Leistungen' },
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true);

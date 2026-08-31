@@ -11,6 +11,8 @@ export interface RawPatient {
   encryptedEntlassdatum: string | null;
   encryptedDiagnose: string | null;
   encryptedLokalisation: string | null;
+  encryptedNextSessionNote: string | null;
+  encryptedNextSessionTests: string | null;
   status: string;
   createdBy: string | null;
   createdAt: number;
@@ -62,6 +64,8 @@ export interface PatientUpdatePayload {
   encryptedEntlassdatum?: string | null;
   encryptedDiagnose?: string | null;
   encryptedLokalisation?: string | null;
+  encryptedNextSessionNote?: string | null;
+  encryptedNextSessionTests?: string | null;
   status?: string;
 }
 
@@ -188,8 +192,11 @@ export interface ElectronAPI {
   getPdfFolder: () => Promise<string>;
   setPdfFolder: (folder: string) => Promise<{ success: boolean; error?: string }>;
   savePdf: (filename: string, bytes: number[]) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
+  saveJson: (filename: string, content: string) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
   // Render the print-optimised profile in a hidden window and export it as a vector PDF.
   exportProfilePdf: (patientId: string, filename: string) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
+  // PDF Experimental — forked copy of the above (see src/lib/featureFlags.ts, PDF_EXPERIMENTAL_ENABLED).
+  exportProfilePdfExperimental: (patientId: string, filename: string) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
   // Print window → main: print layout has finished rendering (fire-and-forget).
   printReady: () => void;
 }

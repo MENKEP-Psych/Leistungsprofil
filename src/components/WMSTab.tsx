@@ -6,7 +6,7 @@ import { Patient, TestResult } from '../types';
 import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning } from './TestForm';
+import { prColorCls, PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
 import { computeWMSAll } from '../lib/wmsUtils';
 
 interface WMSTabProps {
@@ -94,7 +94,13 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
   };
 
   const handleSave = () => {
-    if (!aborted && sofortig === '' && verzoegert === '' && wiedererkennen === '') return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && sofortig === '' && verzoegert === '' && wiedererkennen === '') {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
     const c = computeWMSAll(sofortig, verzoegert, wiedererkennen, age);
     const raw: Record<string, number | string> = {};
     const calc: Record<string, number> = {};
@@ -121,9 +127,9 @@ export const WMSTab: React.FC<WMSTabProps> = ({ patient, previousResults, onSave
       testId: 'wms_vw', date,
       rawValues: raw, calculatedValues: calc, percentileRanks: prs,
       normInfo: `WMS-IV, Altersgruppe: ${c.ageGroupLabel ?? 'Unbekannt'}`,
-      examiner, note, domainMapping: dom,
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      examiner, note: effAborted && !aborted ? '' : note, domainMapping: dom,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }

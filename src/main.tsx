@@ -7,7 +7,10 @@ import './index.css';
 // that case we render only the standalone print layout (no login / app chrome)
 // and load the print stylesheet first so it is applied before the first paint.
 const params = new URLSearchParams(window.location.search);
-const printPatientId = params.get('print') === '1' ? params.get('patient') : null;
+const printMode = params.get('print'); // '1' = production, 'exp' = PDF Experimental
+const printPatientId = printMode === '1' ? params.get('patient') : null;
+// PDF Experimental: fully forked export pipeline, see src/lib/featureFlags.ts.
+const printExpPatientId = printMode === 'exp' ? params.get('patient') : null;
 
 if (printPatientId) {
   Promise.all([
@@ -16,6 +19,15 @@ if (printPatientId) {
   ]).then(([, mod]) => {
     createRoot(document.getElementById('root')!).render(
       <mod.PrintProfileApp patientId={printPatientId} />,
+    );
+  });
+} else if (printExpPatientId) {
+  Promise.all([
+    import('./print-experimental.css'),
+    import('./components/PrintProfileAppExperimental'),
+  ]).then(([, mod]) => {
+    createRoot(document.getElementById('root')!).render(
+      <mod.PrintProfileAppExperimental patientId={printExpPatientId} />,
     );
   });
 } else {

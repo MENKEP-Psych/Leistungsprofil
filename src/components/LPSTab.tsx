@@ -6,7 +6,7 @@ import { Patient, TestResult } from '../types';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { tWertToPR } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
 
 export const LPS_SUBTESTS = [
   { id: 's1_2', label: 'Subtest 1+2' },
@@ -128,7 +128,13 @@ export const LPSTab: React.FC<LPSTabProps> = ({ patient, previousResults, onSave
   const hasAnyInput = LPS_SUBTESTS.some(s => subtests[s.id].rw !== '' || subtests[s.id].tw !== '');
 
   const handleSave = () => {
-    if (!aborted && !hasAnyInput) return;
+    let effAborted = aborted;
+    let effAbortComment = aborted ? abortComment : '';
+    if (!aborted && !hasAnyInput) {
+      if (resolveNoteOnlySave(note) === 'cancel') return;
+      effAborted = true;
+      effAbortComment = note.trim();
+    }
     const rawValues: Record<string, number | string> = { korrektur, version };
     if (version === '50plus') rawValues.lps50Form = lps50Form;
     const percentileRanks: Record<string, number | string> = {};
@@ -144,12 +150,13 @@ export const LPSTab: React.FC<LPSTabProps> = ({ patient, previousResults, onSave
     });
     const result: TestResult = {
       id: editingId ?? Date.now().toString(),
-      testId: 'lps', date, examiner, note,
+      testId: 'lps', date, examiner,
+      note: effAborted && !aborted ? '' : note,
       rawValues, calculatedValues: {}, percentileRanks,
       normInfo: 'LPS – Leistungsprüfsystem (T-Wert → Lienert-Normtabelle)',
       domainMapping: Object.fromEntries(LPS_SUBTESTS.map(s => [s.id, '4. Intellektuelle Leistungen'])),
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
+      aborted: effAborted || undefined,
+      abortComment: effAborted ? effAbortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);

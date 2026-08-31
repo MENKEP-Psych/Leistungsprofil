@@ -39,6 +39,8 @@ const FIELD_LABELS: Record<string, string> = {
   neuropsychologin: 'Neuropsychologin',
   aufnahmedatum:    'Aufnahmedatum',
   entlassdatum:     'Entlassdatum',
+  nextSessionNote:    'Notiz nächste Sitzung',
+  nextSessionTestIds: 'Geplante Tests',
 };
 
 function fmtDate(iso: string): string {
@@ -141,6 +143,14 @@ export function usePatientData(id: string | null) {
     return lines.join('\n');
   }
 
+  // Wird ein Test gespeichert, der für die nächste Sitzung markiert war, gilt er
+  // jetzt als erledigt — die Markierung soll dann standardmäßig wieder verschwinden.
+  const unmarkNextSessionTest = async (testId: string) => {
+    if (patient?.nextSessionTestIds?.includes(testId)) {
+      await updatePatient({ nextSessionTestIds: patient.nextSessionTestIds.filter(t => t !== testId) });
+    }
+  };
+
   const saveScore = async (result: TestResult): Promise<boolean> => {
     if (!patient || !id || !encryptionKey) return false;
 
@@ -148,6 +158,7 @@ export function usePatientData(id: string | null) {
     if (ok) {
       setPreviousResults(prev => [result, ...prev]);
       await addEntry('TEST_SAVED', patient.name, buildResultDetails(result));
+      await unmarkNextSessionTest(result.testId);
     }
     return ok;
   };
@@ -170,7 +181,7 @@ export function usePatientData(id: string | null) {
   };
 
   const updatePatient = async (
-    updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation'>>
+    updates: Partial<Pick<Patient, 'name' | 'geburtsdatum' | 'geschlecht' | 'bildungsjahre' | 'neuropsychologin' | 'aufnahmedatum' | 'entlassdatum' | 'diagnose' | 'lokalisation' | 'nextSessionNote' | 'nextSessionTestIds'>>
   ): Promise<boolean> => {
     if (!patient || !id || !encryptionKey) return false;
 
@@ -229,6 +240,7 @@ export function usePatientData(id: string | null) {
     if (ok) {
       setPreviousResults(prev => prev.map(r => r.id === result.id ? result : r));
       await addEntry('TEST_UPDATED', patient.name, buildResultDetails(result));
+      await unmarkNextSessionTest(result.testId);
     }
     return ok;
   };

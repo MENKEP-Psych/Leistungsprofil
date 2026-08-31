@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StickyNote, History, Download, UserCog, Bell, LogOut,
-  LayoutDashboard, Users, Settings,
-  Upload, CheckCircle, AlertTriangle, Loader2, WifiOff,
+  LayoutDashboard, Users, Settings, Bug,
+  Upload, CheckCircle, AlertTriangle, Loader2, WifiOff, FlaskConical,
 } from 'lucide-react';
-import { Patient } from '../types';
+import { Patient, TestResult } from '../types';
 import { formatDate } from '../lib/utils';
 import type { PatientListItem } from '../hooks/usePatients';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { dbSyncPush, dbSyncHasLocalChanges, dbAddAuditEntry } from '../lib/db-api';
 import type { SyncResult } from '../lib/ipc-types';
+import { BugReportModal } from './BugReportModal';
+import { appVersionLabel } from '../lib/appInfo';
 
 const GESCHLECHT_LABEL: Record<string, string> = { m: 'Männlich', w: 'Weiblich', d: 'Divers' };
 const GESCHLECHT_SYMBOL: Record<string, string> = { m: '♂', w: '♀', d: '⚧' };
@@ -23,11 +25,15 @@ type SyncStatus = 'idle' | 'pushing' | 'success' | 'error';
 
 interface PatientHeaderProps {
   patient: Patient | null;
+  results?: TestResult[];
   activeTab: string;
   onTabChange: (tab: string) => void;
   generalNote?: string;
   onSaveGeneralNote?: (note: string) => void;
   onExportPDF?: () => void;
+  // PDF Experimental — forked export pipeline (see src/lib/featureFlags.ts).
+  // Only wired when PDF_EXPERIMENTAL_ENABLED is true.
+  onExportPDFExperimental?: () => void;
   onManagePatient?: () => void;
   currentUser?: string | null;
   onLogout?: () => void;
@@ -43,11 +49,13 @@ interface PatientHeaderProps {
 
 export const PatientHeader: React.FC<PatientHeaderProps> = ({
   patient,
+  results = [],
   activeTab,
   onTabChange,
   generalNote = '',
   onSaveGeneralNote,
   onExportPDF,
+  onExportPDFExperimental,
   onManagePatient,
   currentUser,
   onLogout,
@@ -60,6 +68,7 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
   onSyncComplete,
 }) => {
   const { currentUser: authUser } = useAuth();
+  const [bugReportOpen, setBugReportOpen] = useState(false);
 
   // ── Sync state (only active when serverPath is set) ──────────────────────
   const [syncStatus, setSyncStatus]   = useState<SyncStatus>('idle');
@@ -132,6 +141,7 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
   const isSyncing = syncStatus === 'pushing';
 
   return (
+    <>
     <header className="no-print bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-[0_1px_0_0_rgba(0,0,0,0.04)] sticky top-0 z-50 h-16 flex items-stretch">
 
       {/* ── Navigation tabs ── */}
@@ -233,12 +243,27 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
         </div>
       )}
 
+      {/* ── Fehler melden ── */}
+      {patient && (
+        <div data-onboarding="bug-report-btn" className="flex items-center px-3 shrink-0 border-l border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setBugReportOpen(true)}
+            title={`Fehler bei diesem Patienten melden · App-Version ${appVersionLabel()}`}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+          >
+            <Bug size={13} />
+            Fehler melden
+          </button>
+        </div>
+      )}
+
       {/* ── Note ── */}
       {patient && onSaveGeneralNote && (
-        <div className="flex flex-col justify-center gap-[5px] px-5 w-72 shrink-0 border-l border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col justify-center gap-[5px] px-5 w-80 shrink-0 border-l border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1.5 leading-none">
-            <StickyNote size={11} className="text-amber-400 dark:text-amber-500 shrink-0" />
-            <span className="text-[10px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest select-none">
+            <StickyNote size={12} className="text-amber-400 dark:text-amber-500 shrink-0" />
+            <span className="text-[11px] font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest select-none">
               Interne Notiz
             </span>
           </div>
@@ -248,12 +273,12 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
             onChange={e => onSaveGeneralNote(e.target.value)}
             placeholder="Notiz eintragen…"
             className={cn(
-              'w-full text-[12px] leading-none bg-transparent',
+              'w-full text-sm leading-none bg-transparent',
               'text-slate-700 dark:text-slate-200',
               'placeholder:text-slate-300 dark:placeholder:text-slate-600',
               'border-b border-slate-200 dark:border-slate-700',
               'focus:border-amber-400 dark:focus:border-amber-500',
-              'outline-none transition-colors pb-0.5',
+              'outline-none transition-colors pb-1',
             )}
           />
         </div>
@@ -328,6 +353,16 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
             PDF
           </button>
         )}
+        {patient && onExportPDFExperimental && (
+          <button
+            onClick={onExportPDFExperimental}
+            title="Experimenteller PDF-Export (eigene, abgekoppelte Pipeline) – siehe featureFlags.ts"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-amber-400 dark:border-amber-500/70 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all"
+          >
+            <FlaskConical size={12} />
+            PDF Exp.
+          </button>
+        )}
         {patient && onManagePatient && (
           <button
             onClick={onManagePatient}
@@ -368,5 +403,14 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
       </div>
 
     </header>
+    {patient && (
+      <BugReportModal
+        isOpen={bugReportOpen}
+        onClose={() => setBugReportOpen(false)}
+        patient={patient}
+        results={results}
+      />
+    )}
+    </>
   );
 };

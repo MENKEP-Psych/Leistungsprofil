@@ -5,27 +5,35 @@ import { PRProfile } from './PRProfile';
 import { Layers, CheckCircle, Loader2 } from 'lucide-react';
 import { exportProfilePDFScreenshot } from '../lib/exportPDFScreenshot';
 import { useProfileData } from '../hooks/useProfileData';
-import { isElectron, dbExportProfilePdf } from '../lib/db-api';
+import { isElectron, dbExportProfilePdf, dbExportProfilePdfExperimental } from '../lib/db-api';
 
 interface ProfileTabProps {
   patient: Patient;
   results: TestResult[];
   generalNote: string;
+  onUpdatePatient: (updates: Partial<Pick<Patient, 'nextSessionNote' | 'nextSessionTestIds'>>) => Promise<boolean>;
 }
 
 export const ProfileTab: React.FC<ProfileTabProps> = ({
   patient,
   results,
+  onUpdatePatient,
 }) => {
   const [pdfSaveMsg, setPdfSaveMsg] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const exportHandlerRef = React.useRef<(() => void) | null>(null);
+  const exportExperimentalHandlerRef = React.useRef<(() => void) | null>(null);
   const profileRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const listener = () => { exportHandlerRef.current?.(); };
+    const experimentalListener = () => { exportExperimentalHandlerRef.current?.(); };
     window.addEventListener('app:pdf-export', listener);
-    return () => window.removeEventListener('app:pdf-export', listener);
+    window.addEventListener('app:pdf-export-experimental', experimentalListener);
+    return () => {
+      window.removeEventListener('app:pdf-export', listener);
+      window.removeEventListener('app:pdf-export-experimental', experimentalListener);
+    };
   }, []);
 
   // Single source of truth for the profile data — shared with the PDF print layout.
@@ -57,6 +65,33 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   };
   exportHandlerRef.current = handleExportPDF;
 
+  // PDF Experimental — forked copy of handleExportPDF. Runs through the fully
+  // independent experimental pipeline (see src/lib/featureFlags.ts,
+  // PDF_EXPERIMENTAL_ENABLED). Electron only, filename gets a "(Experimentell)"
+  // marker so test exports don't collide with the production PDF. Reuses the
+  // same "PDF wird erstellt…" / "Gespeichert in…" toasts.
+  const handleExportPDFExperimental = async () => {
+    if (!isElectron()) return;
+    flushSync(() => { setPdfSaveMsg(null); setPdfLoading(true); });
+    try {
+      const nameParts = patient.name.trim().split(' ');
+      const lastName  = nameParts[nameParts.length - 1];
+      const firstName = nameParts.slice(0, -1).join(' ');
+      const dateStr   = new Date().toISOString().split('T')[0];
+      const filename  = `${lastName}, ${firstName} ${dateStr} Leistungsprofil (Experimentell).pdf`;
+
+      const result = await dbExportProfilePdfExperimental(patient.id, filename);
+
+      if (result && result.success && result.filePath) {
+        setPdfSaveMsg(`Gespeichert in ${result.filePath}`);
+        setTimeout(() => setPdfSaveMsg(null), 5000);
+      }
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+  exportExperimentalHandlerRef.current = handleExportPDFExperimental;
+
   return (
     <div className="space-y-8">
       {/* PDF toasts (fixed position) */}
@@ -84,6 +119,8 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       ) : (
         <PRProfile results={profileData} textResults={textResults} extraBottomContent={extraBottomContent} containerRef={profileRef} />
       )}
+      {/* Test-Status-Sidebar (rechts) vorerst ausgeblendet — Komponente bleibt erhalten,
+          siehe src/components/TestStatusPanel.tsx, `onUpdatePatient` wird bereits durchgereicht. */}
 
     </div>
   );

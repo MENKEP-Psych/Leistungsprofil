@@ -54,6 +54,8 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
     try { serverDb.exec('ALTER TABLE patients ADD COLUMN encrypted_diagnose TEXT'); } catch { /* already exists */ }
     try { serverDb.exec('ALTER TABLE patients ADD COLUMN encrypted_lokalisation TEXT'); } catch { /* already exists */ }
     try { serverDb.exec('ALTER TABLE patients ADD COLUMN encrypted_mitarbeiter TEXT'); } catch { /* already exists */ }
+    try { serverDb.exec('ALTER TABLE patients ADD COLUMN encrypted_next_session_note TEXT'); } catch { /* already exists */ }
+    try { serverDb.exec('ALTER TABLE patients ADD COLUMN encrypted_next_session_tests TEXT'); } catch { /* already exists */ }
     // test_results columns that may be missing on older DBs
     try { serverDb.exec('ALTER TABLE test_results ADD COLUMN examiner TEXT'); } catch { /* already exists */ }
     try { serverDb.exec("ALTER TABLE test_results ADD COLUMN encrypted_calculated_values TEXT NOT NULL DEFAULT '{}'"); } catch { /* already exists */ }
@@ -82,13 +84,15 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
           encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
           encrypted_aufnahmedatum, encrypted_entlassdatum,
           encrypted_diagnose, encrypted_lokalisation,
-          status, encrypted_general_note, created_by, created_at, updated_at)
+          status, encrypted_general_note, encrypted_next_session_note, encrypted_next_session_tests,
+          created_by, created_at, updated_at)
         SELECT
           id, encrypted_name, encrypted_geburtsdatum, encrypted_geschlecht,
           encrypted_bildungsjahre, encrypted_neuropsychologin, encrypted_mitarbeiter,
           encrypted_aufnahmedatum, encrypted_entlassdatum,
           encrypted_diagnose, encrypted_lokalisation,
-          status, encrypted_general_note, created_by, created_at, updated_at
+          status, encrypted_general_note, encrypted_next_session_note, encrypted_next_session_tests,
+          created_by, created_at, updated_at
         FROM local.patients WHERE created_at >= ?
       `).run(pullTime).changes;
 
@@ -107,6 +111,8 @@ export function pushToServer(serverDbPath: string, localDbPath: string, pullTime
             encrypted_diagnose         = lp.encrypted_diagnose,
             encrypted_lokalisation     = lp.encrypted_lokalisation,
             encrypted_general_note     = lp.encrypted_general_note,
+            encrypted_next_session_note  = lp.encrypted_next_session_note,
+            encrypted_next_session_tests = lp.encrypted_next_session_tests,
             status                     = lp.status,
             updated_at                 = lp.updated_at
         FROM local.patients AS lp

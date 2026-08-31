@@ -18,11 +18,12 @@ import {
   PenLine,
   CheckCircle2,
   NotebookPen,
+  CalendarCheck,
 } from 'lucide-react';
-import { getTestSymbolCounts } from './lib/testSummary';
 import { usePatientData } from './hooks/usePatientData';
 import { usePatients } from './hooks/usePatients';
 import { PatientHeader } from './components/PatientHeader';
+import { OnboardingModal } from './components/OnboardingModal';
 import { TMTTab } from './components/TMTTab';
 import { VLMTTab } from './components/VLMTTab';
 import { TOLTab } from './components/TOLTab';
@@ -32,7 +33,7 @@ import { NeglectTab } from './components/NeglectTab';
 import { TAPTab } from './components/TAPTab';
 import { WMSTab } from './components/WMSTab';
 import { ZZTTab } from './components/ZZTTab';
-import { ZZT_ENABLED } from './lib/featureFlags';
+import { ZZT_ENABLED, PDF_EXPERIMENTAL_ENABLED } from './lib/featureFlags';
 import { MosaikTab } from './components/MosaikTab';
 import { ROCFTTab } from './components/ROCFTTab';
 import { ZahlenspanneTab } from './components/ZahlenspanneTab';
@@ -148,6 +149,26 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<TabType>('patients');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // "Nächste Sitzung"-Markiermodus: rein transient (nicht persistiert). Der Button
+  // ist auch innerhalb einzelner Test-Tabs sichtbar/nutzbar, nicht nur im
+  // Leistungsprofil — der Modus bleibt daher beim Wechseln zwischen Profil und
+  // Test-Tabs erhalten und schaltet sich erst aus, wenn man den Patientenkontext
+  // ganz verlässt (z. B. zur Patientenliste) oder einen anderen/neuen Patienten
+  // öffnet — nur die tatsächlich markierten Tests (patient.nextSessionTestIds)
+  // werden gespeichert, der Modus selbst nicht.
+  const [planningMode, setPlanningMode] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'profile' && !TEST_TABS_SET.has(activeTab)) setPlanningMode(false);
+  }, [activeTab]);
+  useEffect(() => { setPlanningMode(false); }, [selectedId]);
+
+  const toggleNextSessionTest = (testId: string) => {
+    if (!patient) return;
+    const current = patient.nextSessionTestIds ?? [];
+    const next = current.includes(testId) ? current.filter(t => t !== testId) : [...current, testId];
+    updatePatient({ nextSessionTestIds: next });
+  };
 
   // ── Scroll-to-Top on tab change ───────────────────────────────────────────
   const mainRef = useRef<HTMLElement>(null);
@@ -362,6 +383,11 @@ function AppContent() {
     window.dispatchEvent(new CustomEvent('app:pdf-export'));
   };
 
+  // PDF Experimental — see src/lib/featureFlags.ts (PDF_EXPERIMENTAL_ENABLED).
+  const handleExportPDFExperimental = () => {
+    window.dispatchEvent(new CustomEvent('app:pdf-export-experimental'));
+  };
+
   // Map sidebar tab IDs to test result testIds for PR symbol display
   const TAB_TO_TEST_ID: Record<string, string> = {
     tmt: 'tmt', tap: 'tap', zzt: 'zzt',
@@ -369,6 +395,7 @@ function AppContent() {
     mosaik: 'mosaik', rocft: 'rey',
     lps: 'lps',
     tol: 'tol',
+    buerotest: 'buerotest', tagesplan: 'tagesplan', neglect: 'neglect_gf', custom: 'custom',
   };
 
   const domainGroups: {
@@ -441,9 +468,14 @@ function AppContent() {
 
   return (
     <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 flex flex-col font-sans text-slate-900 dark:text-slate-100">
+      <OnboardingModal
+        currentUser={currentUser}
+        canRun={!!patient && (activeTab === 'profile' || TEST_TABS_SET.has(activeTab))}
+      />
       {/* Always-visible app header */}
       <PatientHeader
         patient={patient ?? null}
+        results={previousResults}
         activeTab={activeTab}
         onTabChange={(tab) => {
           if (tab === 'patients') navigate('patients', null);
@@ -452,6 +484,7 @@ function AppContent() {
         generalNote={generalNote}
         onSaveGeneralNote={saveGeneralNote}
         onExportPDF={patient ? handleExportPDF : undefined}
+        onExportPDFExperimental={patient && PDF_EXPERIMENTAL_ENABLED ? handleExportPDFExperimental : undefined}
         onManagePatient={patient ? () => setIsEditModalOpen(true) : undefined}
         currentUser={currentUser}
         onLogout={logout}
@@ -466,33 +499,50 @@ function AppContent() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <nav className="no-print w-56 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.04)]">
+        <nav data-onboarding="test-sidebar" className="no-print w-56 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-[1px_0_0_0_rgba(0,0,0,0.04)]">
           <div className="scrollbar-thin flex-1 overflow-y-auto py-2">
             {domainGroups.map((group, gi) => (
               <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
+                {group.label === '1. Aufmerksamkeit' && (
+                  <div className="mx-4 mb-3 border-t border-slate-200 dark:border-slate-700" />
+                )}
                 {group.label && (
-                  <div className="px-4 pt-1 pb-1 text-[9px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-widest select-none">
+                  <div className="px-4 pt-1 pb-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-widest select-none">
                     {group.label}
                   </div>
                 )}
                 {group.items.map(tab => {
                   const testId = TAB_TO_TEST_ID[tab.id];
-                  const counts = (testId && previousResults && previousResults.length > 0)
-                    ? getTestSymbolCounts(testId, previousResults)
-                    : null;
+                  // TAP wird typischerweise in jeder Sitzung wiederholt — anders als die
+                  // übrigen (meist einmaligen) Tests soll es daher nie ausgegraut werden.
+                  // Jeder Test wird eigenständig als „erledigt" markiert. Zahlenspanne und
+                  // Blockspanne werden bewusst NICHT mehr gemeinsam ausgegraut, auch wenn
+                  // sie klinisch dieselbe Merkspanne prüfen — die Nutzer:innen empfanden
+                  // das als Fehler (der noch offene Test verschwand aus dem Blick).
+                  const isDone = tab.id === 'tap' ? false
+                    : !!testId && !!previousResults?.some(r => r.testId === testId);
                   const isActive = activeTab === tab.id;
+                  const isPlanned = !!testId && !!patient?.nextSessionTestIds?.includes(testId);
                   return (
                     <button
                       key={tab.id}
                       disabled={tab.disabled}
-                      onClick={() => navigate(tab.id as TabType)}
-                      title={tab.disabled ? 'Bitte zuerst einen Patienten auswählen' : undefined}
+                      onClick={() => {
+                        if (planningMode && testId) toggleNextSessionTest(testId);
+                        else navigate(tab.id as TabType);
+                      }}
+                      title={tab.disabled ? 'Bitte zuerst einen Patienten auswählen' : planningMode && testId ? 'Für nächste Sitzung markieren/entfernen' : undefined}
                       className={cn(
-                        'relative w-[calc(100%-8px)] mx-1 flex items-center gap-2.5 px-3 py-1.5 text-left rounded-lg transition-colors',
+                        'relative w-[calc(100%-8px)] mx-1 flex items-center px-3 py-1.5 text-left rounded-lg transition-colors',
                         isActive
                           ? 'text-white dark:text-slate-900 font-semibold'
-                          : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60',
+                          : 'text-slate-700 dark:text-slate-200 font-medium hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60',
                         tab.disabled && 'opacity-35 cursor-not-allowed',
+                        // Grüner Rahmen + leichter Glow bewusst auf dem äußeren Button (volle
+                        // Deckkraft), NICHT auf demselben Element wie das Ausgrauen — CSS
+                        // `opacity` würde sonst den Ring/Glow anteilig mit ausblassen, da es
+                        // das ganze Element inkl. box-shadow als Gruppe abdunkelt.
+                        isPlanned && 'ring-2 ring-inset ring-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.55)]',
                       )}
                     >
                       {isActive && (
@@ -501,29 +551,15 @@ function AppContent() {
                           className="absolute inset-0 bg-slate-800 rounded-lg"
                         />
                       )}
-                      <tab.icon size={13} className="relative z-10 shrink-0" />
-                      <span className="relative z-10 text-[13px] flex-1 truncate leading-snug">
-                        {tab.label}
-                      </span>
-                      {counts && (counts.above > 0 || counts.average > 0 || counts.below > 0) && (
-                        <span className="relative z-10 flex items-center gap-1 shrink-0">
-                          {counts.above > 0 && (
-                            <span className="text-[10px] font-semibold text-emerald-500 tabular-nums">
-                              {counts.above}↑
-                            </span>
-                          )}
-                          {counts.average > 0 && (
-                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 tabular-nums">
-                              {counts.average}−
-                            </span>
-                          )}
-                          {counts.below > 0 && (
-                            <span className="text-[10px] font-semibold text-rose-500 tabular-nums">
-                              {counts.below}↓
-                            </span>
-                          )}
+                      <span className={cn(
+                        'relative z-10 flex items-center gap-2.5 flex-1 min-w-0',
+                        isDone && !isActive && !tab.disabled && 'opacity-25 italic',
+                      )}>
+                        <tab.icon size={13} className="shrink-0" />
+                        <span className="text-[13px] flex-1 truncate leading-snug">
+                          {tab.label}
                         </span>
-                      )}
+                      </span>
                     </button>
                   );
                 })}
@@ -547,7 +583,7 @@ function AppContent() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.15 }}
-                className="max-w-7xl mx-auto"
+                className={activeTab === 'profile' ? 'max-w-[1600px] mx-auto' : 'max-w-7xl mx-auto'}
               >
                 <ErrorBoundary key={activeTab + (selectedId ?? '')} label={activeTab}>
                 {activeTab === 'patients' && (
@@ -562,6 +598,7 @@ function AppContent() {
                     patient={patient}
                     results={previousResults}
                     generalNote={generalNote}
+                    onUpdatePatient={updatePatient}
                   />
                 )}
 
@@ -730,33 +767,53 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Keyboard shortcuts help — always visible, hover to show */}
-      <div className="no-print fixed bottom-6 left-6 z-50 group">
-        <button
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-colors text-xs font-bold shadow-sm"
-          title="Tastaturkürzel"
-          tabIndex={-1}
-        >
-          ?
-        </button>
-        <div className="absolute bottom-10 left-0 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-150 origin-bottom-left">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Tastaturkürzel</p>
-          <div className="space-y-2">
-            {([
-              ['Ctrl + S', 'Test speichern'],
-              ['Ctrl + <', 'Zum Leistungsprofil'],
-              ['Ctrl + Y', 'Zur Patientenliste'],
-              ['PageDown / PageUp', 'Test-Tabs navigieren'],
-              ['/ / /', 'Zum Leistungsprofil'],
-              ['* * *', 'Zur Patientenliste'],
-            ] as [string, string][]).map(([key, desc]) => (
-              <div key={key} className="flex items-center justify-between gap-3">
-                <code className="shrink-0 text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600 font-mono">{key}</code>
-                <span className="text-xs text-slate-500 text-right leading-tight">{desc}</span>
-              </div>
-            ))}
+      {/* Bottom-left: Tastaturkürzel-Hilfe + "Nächste Sitzung"-Markiermodus */}
+      <div className="no-print fixed bottom-6 left-6 z-50 flex items-center gap-2">
+        <div className="group relative">
+          <button
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-colors text-xs font-bold shadow-sm"
+            title="Tastaturkürzel"
+            tabIndex={-1}
+          >
+            ?
+          </button>
+          <div className="absolute bottom-10 left-0 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-4 invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-150 origin-bottom-left">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Tastaturkürzel</p>
+            <div className="space-y-2">
+              {([
+                ['Ctrl + S', 'Test speichern'],
+                ['Ctrl + <', 'Zum Leistungsprofil'],
+                ['Ctrl + Y', 'Zur Patientenliste'],
+                ['PageDown / PageUp', 'Test-Tabs navigieren'],
+                ['/ / /', 'Zum Leistungsprofil'],
+                ['* * *', 'Zur Patientenliste'],
+              ] as [string, string][]).map(([key, desc]) => (
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <code className="shrink-0 text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600 font-mono">{key}</code>
+                  <span className="text-xs text-slate-500 text-right leading-tight">{desc}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+
+        {patient && (activeTab === 'profile' || TEST_TABS_SET.has(activeTab)) && (
+          <button
+            data-onboarding="next-session-btn"
+            type="button"
+            onClick={() => setPlanningMode(v => !v)}
+            title="Tests in der linken Leiste anklicken, um sie für die nächste Sitzung zu markieren"
+            className={cn(
+              'flex items-center gap-1.5 px-3 h-8 rounded-full text-[11px] font-semibold shadow-sm border transition-colors',
+              planningMode
+                ? 'bg-emerald-500 border-emerald-500 text-white'
+                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700',
+            )}
+          >
+            <CalendarCheck size={13} />
+            Nächste Sitzung
+          </button>
+        )}
       </div>
     </div>
   );
