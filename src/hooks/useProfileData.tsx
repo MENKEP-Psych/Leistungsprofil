@@ -157,6 +157,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           details: hasVal(latestA.rawValues.A) ? [`Zeit: ${latestA.rawValues.A}s`] : undefined,
           previousDetails: previousA && hasVal(previousA.rawValues.A) ? [`Zeit: ${previousA.rawValues.A}s`] : undefined,
           note: combineTmtNotes(latestA, previousA, 'A'),
+          noteLabel: 'TMT Teil A',
           ...abt(latestA),
           ...pabt(previousA),
         });
@@ -176,6 +177,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           details: hasVal(latestB.rawValues.B) ? [`Zeit: ${latestB.rawValues.B}s`] : undefined,
           previousDetails: previousB && hasVal(previousB.rawValues.B) ? [`Zeit: ${previousB.rawValues.B}s`] : undefined,
           note: combineTmtNotes(latestB, previousB, 'B'),
+          noteLabel: 'TMT Teil B',
           ...abt(latestB),
           ...pabt(previousB),
         });
@@ -527,6 +529,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             details: mainDetails,
             previousDetails: mainPrevDetails,
             note: tapNote(latest, m.key, previous),
+            noteLabel: m.label,
             ...abt(latest),
             ...pabt(previous),
           });
@@ -566,6 +569,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
                   details: sdRaw ? [`SD: ${sdRaw} ${sdDef.unit}`] : undefined,
                   previousDetails: tapTrim(sdPrevRaw) ? [`SD: ${sdPrevRaw} ${sdDef.unit}`] : undefined,
                   note: tapNote(latest, m.key, previous),
+                  noteLabel: m.label,
                   ...abt(latest),
                   ...pabt(previous),
                 });
@@ -607,6 +611,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
               details: rawVal != null && rawVal !== '' ? [`Wert: ${rawVal}`] : undefined,
               previousDetails: tapTrim(fPrevRaw) ? [`Wert: ${fPrevRaw}`] : undefined,
               note: tapNote(latest, m.key, previous),
+              noteLabel: m.label,
               ...abt(latest),
               ...pabt(previous),
             });
@@ -655,6 +660,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             details: rawVal ? [`Wert: ${rawVal}${m.unit ? ' ' + m.unit : ''}`] : undefined,
             previousDetails: tapTrim(vePrevRaw) ? [`Wert: ${vePrevRaw}${m.unit ? ' ' + m.unit : ''}`] : undefined,
             note: combineTapNoteField(latest, previous, 'note_ve'),
+            noteLabel: m.label,
             ...abt(latest),
             ...pabt(previous),
           });
@@ -716,6 +722,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             details: rawVal ? [`SD: ${rawVal} ${m.unit}`] : undefined,
             previousDetails: tapTrim(sdOnlyPrevRaw) ? [`SD: ${sdOnlyPrevRaw} ${m.unit}`] : undefined,
             note: combineTapNoteField(latest, previous, TAP_SD_NOTE_FIELD[m.key]),
+            noteLabel: m.label,
             ...abt(latest),
             ...pabt(previous),
           });
@@ -820,6 +827,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             domain: '3. Visuo-Perz. / Visuo-Konstr.',
             testGroup: 'Rey-Osterrieth-Figur (ROCFT)',
             note: combineNotes(latest, previous),
+            noteLabel: 'Rey-Figur (ROCFT)',
             ...abt(latest),
           });
         }
@@ -839,6 +847,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
             details: [`RW: ${latest.rawValues[s.rawKey] ?? '–'}`],
             previousDetails: previous ? [`RW: ${previous.rawValues[s.rawKey] ?? '–'}`] : undefined,
             note: combineNotes(latest, previous),
+            noteLabel: 'Rey-Figur (ROCFT)',
             ...abt(latest),
             ...pabt(previous),
           });
@@ -1442,6 +1451,7 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         subdomain: meta.subdomain,
         testGroup: meta.testGroup,
         note: latest.note!.trim(),
+        noteLabel: meta.label,
       });
     }
 

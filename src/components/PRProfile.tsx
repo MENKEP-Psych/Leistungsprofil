@@ -301,6 +301,12 @@ function findTestGroupOrder(sub: SubsectionConfig, tg: string): number {
 const SD_MAJOR = [-3, -2, -1, 0, 1, 2, 3] as const;
 const SD_MINOR = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5] as const;
 
+// Breite/Farbe der ganzzahligen SD-Hauptstriche — bewusst ganzzahlige Pixel und
+// EIN gemeinsamer Wert für alle (0/±1/±2/±3 SD), damit sie im Druck nicht je nach
+// Spaltenposition unterschiedlich dick gerastert werden.
+const SD_MAJOR_W = 2;
+const SD_MAJOR_COLOR = '#64748b';
+
 const ReferenceLinesOverlay: React.FC = () => (
   <>
     <div className="absolute pointer-events-none" style={{
@@ -316,14 +322,22 @@ const ReferenceLinesOverlay: React.FC = () => (
         zIndex: 1,
       }} />
     ))}
-    {SD_MAJOR.map(z => (
-      <div key={z} className="absolute pointer-events-none" style={{
-        left: `${zToX(z)}%`, top: 0, bottom: 0,
-        width: z === 0 ? 2 : 1.5,
-        backgroundColor: z === 0 ? '#94a3b8' : '#cbd5e1',
-        zIndex: 1,
-      }} />
-    ))}
+    {SD_MAJOR.map(z => {
+      const x = zToX(z);
+      const atLeft  = x <= 0.01;
+      const atRight = x >= 99.99;
+      return (
+        <div key={z} className="absolute pointer-events-none" style={{
+          ...(atRight
+            ? { right: 0 }
+            : { left: atLeft ? 0 : `calc(${x}% - ${SD_MAJOR_W / 2}px)` }),
+          top: 0, bottom: 0,
+          width: SD_MAJOR_W,
+          backgroundColor: SD_MAJOR_COLOR,
+          zIndex: 1,
+        }} />
+      );
+    })}
   </>
 );
 
@@ -355,7 +369,7 @@ export const AxisScale: React.FC<{ className?: string; printMode?: boolean }> = 
       return (
         <div key={z} className="absolute flex flex-col" style={{ left: `${zToX(z)}%`, transform: xf, alignItems: ai, top: 0 }}>
           <span className="text-[10px] font-semibold tabular-nums leading-none text-slate-500 dark:text-slate-400">{pr || ' '}</span>
-          <div style={{ width: 1, height: 6, backgroundColor: '#94a3b8', marginTop: 1, alignSelf: ai }} />
+          <div style={{ width: SD_MAJOR_W, height: 7, backgroundColor: SD_MAJOR_COLOR, marginTop: 1, alignSelf: ai }} />
           <span className="text-[9px] tabular-nums leading-none mt-0.5 text-slate-400 dark:text-slate-500 whitespace-nowrap">
             {z > 0 ? `+${z}` : z} SD
           </span>
@@ -409,10 +423,31 @@ export const ProfileLegend: React.FC<{ className?: string; printMode?: boolean }
 // TAP, ROCFT, WMS, LG, Zahlen-/Blockspanne …).
 // ---------------------------------------------------------------------------
 
-const collectNotes = (rows: { note?: string }[]): string[] =>
-  orderedUnique(rows.map(r => (r.note ?? '').trim()).filter(Boolean));
+interface NoteEntry { label: string; text: string; }
 
-const NoteBanner: React.FC<{ notes: string[]; printMode?: boolean }> = ({ notes, printMode = false }) => {
+// Bezeichnung für die Notiz-Zeile: bevorzugt `noteLabel` (z. B. „TMT Teil B"),
+// sonst der Testverfahren-Name aus `testGroup` ohne den Versions-Zusatz.
+const noteLabelFor = (r: PRResult): string =>
+  (r.noteLabel ?? r.testGroup ?? r.label ?? '')
+    .replace(/\s*[–-]\s*Version\b.*$/i, '')
+    .trim();
+
+const collectNotes = (rows: PRResult[]): NoteEntry[] => {
+  const seen = new Set<string>();
+  const out: NoteEntry[] = [];
+  for (const r of rows) {
+    const text = (r.note ?? '').trim();
+    if (!text) continue;
+    const label = noteLabelFor(r);
+    const key = `${label} ${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label, text });
+  }
+  return out;
+};
+
+const NoteBanner: React.FC<{ notes: NoteEntry[]; printMode?: boolean }> = ({ notes, printMode = false }) => {
   if (notes.length === 0) return null;
   return (
     <div className="pr-note-banner mt-0.5 mb-1.5 space-y-0.5">
@@ -422,7 +457,10 @@ const NoteBanner: React.FC<{ notes: string[]; printMode?: boolean }> = ({ notes,
           className={`flex items-start gap-1.5 ${printMode ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`}
         >
           <StickyNote size={12} className="shrink-0 mt-[3px] text-slate-400 dark:text-slate-500" />
-          <p className="text-[12px] leading-snug whitespace-pre-wrap flex-1 min-w-0">{n}</p>
+          <p className="text-[12px] leading-snug whitespace-pre-wrap flex-1 min-w-0">
+            {n.label && <span className="font-semibold">Notiz zu {n.label}: </span>}
+            {n.text}
+          </p>
         </div>
       ))}
     </div>
@@ -835,9 +873,9 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
   return (
     <div ref={containerRef} className="pr-chart w-full bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md shadow-slate-200/60 dark:shadow-none">
 
-      {/* Spaltenkopf + SD-/PR-Skala: die Skala steht jetzt oben über der Grafik-Spalte
-          (Bildschirm). Im PDF wird sie stattdessen im wiederkehrenden Seitenkopf gezeigt
-          (hideAxis) — sie erscheint dort auf jeder Seite. */}
+      {/* Spaltenkopf + SD-/PR-Skala: die Skala steht in derselben Zeile wie
+          „Test | Prozentrang (PR)", direkt über der Grafik-Spalte — Bildschirm
+          und PDF (im PDF: unter dem Titel, oben auf Seite 1). */}
       {hasMainContent && (
         <div className="flex items-end mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-700">
           <div className="shrink-0 pr-3 flex items-baseline justify-between" style={{ width: LEFT_W }}>

@@ -61,6 +61,9 @@ export interface PRResult {
   details?: string[];
   previousDetails?: string[];
   note?: string;
+  /** Bezeichnung für das Notiz-Banner („Notiz zu <noteLabel>: …"). Fällt sonst
+   *  auf den Testverfahren-Namen (testGroup) zurück. */
+  noteLabel?: string;
   tapVersion?: 'M' | '2.3';
   lpsKorrektur?: string;
   aborted?: boolean;
