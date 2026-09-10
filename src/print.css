@@ -89,6 +89,19 @@ body {
   page-break-after: avoid;
 }
 
+/* Notiz-Banner: einmal am Anfang des Testblocks, nicht umbrechen und mit den
+   folgenden Messwert-Zeilen zusammenhalten. Schriftgröße im Druck NICHT
+   verkleinern (die Notiz ist oft interpretationsrelevant). */
+.pr-note-banner {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.pr-note-banner p {
+  font-size: 12px !important;
+}
+
 /* Avoid orphaning a test-group / subsection label at the foot of a page. */
 .pr-domain {
   break-before: auto;

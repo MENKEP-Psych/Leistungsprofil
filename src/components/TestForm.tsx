@@ -4,30 +4,29 @@
 import React from 'react';
 import { Save, CheckCircle2, X, History, OctagonX } from 'lucide-react';
 import { cn, formatDate, calculateAge } from '../lib/utils';
+import { confirmDialog } from '../lib/confirmDialog';
 
 const noSpinner = 'appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 // ── "Notiz ohne Messwerte" beim Speichern ─────────────────────────────────────
-// Wird ein Test-Formular ohne einen einzigen Messwert und ohne gesetztes
-// „abgebrochen"-Flag gespeichert, aber MIT einer eingetragenen Notiz, dann ist
-// das fast immer der Fall „Test konnte nicht durchgeführt werden, Grund steht in
-// der Notiz". Früher hat `handleSave` in diesem Fall stillschweigend gar nichts
-// gespeichert — die Notiz ging verloren und im Leistungsprofil tauchte nichts
-// auf. Statt dessen wird jetzt nachgefragt und das Ergebnis auf Wunsch als
-// Abbruch mit der Notiz als Begründung gespeichert.
-export const NOTE_ONLY_SAVE_PROMPT =
-  'Es wurden keine Messwerte eingegeben.\n\n'
-  + 'Soll der Test als „nicht durchgeführt / abgebrochen" gespeichert werden und '
-  + 'die eingegebene Notiz als Begründung übernommen werden?';
-
-/**
- * Entscheidet, was ein `handleSave` ohne Messwerte tun soll:
- * - Notiz vorhanden  → fragt nach; bei Bestätigung als Abbruch speichern.
- * - keine Notiz      → nichts speichern (wie bisher).
- */
-export function resolveNoteOnlySave(noteText: string): 'save-aborted' | 'cancel' {
-  if (noteText.trim() && window.confirm(NOTE_ONLY_SAVE_PROMPT)) return 'save-aborted';
-  return 'cancel';
+// Wird ein Test-Formular ohne einen einzigen Messwert, aber MIT einer Notiz
+// gespeichert, ist das fast immer „Test konnte nicht (vollständig) durchgeführt
+// werden — Grund steht in der Notiz". Der frühere „Test abgebrochen"-Button ist
+// entfernt; nicht durchführbare Tests werden über die Notiz kommuniziert.
+// Hier eine kurze In-App-Rückfrage; bei Bestätigung wird das Ergebnis als ganz
+// normales TestResult mit der Notiz gespeichert (ohne „abgebrochen"-Flag). Im
+// Leistungsprofil erscheint dann eine Zeile mit „–" und der Notiz als Hinweis.
+export async function confirmNoteOnlySave(noteText: string): Promise<boolean> {
+  if (!noteText.trim()) return false;
+  return confirmDialog({
+    title: 'Test ohne Messwerte speichern?',
+    message:
+      'Es wurden keine Messwerte eingegeben.\n\n'
+      + 'Nur die Notiz wird gespeichert und erscheint im Leistungsprofil als Hinweis '
+      + 'zu diesem Test.',
+    confirmLabel: 'Speichern',
+    cancelLabel: 'Abbrechen',
+  });
 }
 
 // ── PR color coding ───────────────────────────────────────────────────────────
@@ -301,43 +300,11 @@ export const NoteField: React.FC<NoteFieldProps> = ({ value, onChange }) => (
   </div>
 );
 
-// ── AbortButton ───────────────────────────────────────────────────────────────
-
-interface AbortButtonProps {
-  aborted: boolean;
-  comment: string;
-  onToggle: () => void;
-  onComment: (v: string) => void;
-}
-
-export const AbortButton: React.FC<AbortButtonProps> = ({ aborted, comment, onToggle, onComment }) => (
-  <div className="space-y-2">
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-2xl text-sm font-medium transition-all w-full',
-        aborted
-          ? 'bg-orange-50 text-orange-700 border border-orange-100'
-          : 'bg-gray-50 text-gray-400 hover:bg-orange-50 hover:text-orange-600',
-      )}
-    >
-      <OctagonX size={15} className="shrink-0" />
-      {aborted ? 'Test als abgebrochen markiert — hier klicken zum Aufheben' : 'Test abgebrochen / unvollständig'}
-    </button>
-    {aborted && (
-      <textarea
-        value={comment}
-        onChange={e => onComment(e.target.value)}
-        placeholder="Grund für Abbruch (z.B. Patient verweigerte Weiterführung, Ermüdung, Zeit)"
-        rows={2}
-        className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 resize-none placeholder:text-orange-300"
-      />
-    )}
-  </div>
-);
-
 // ── AbortBadge ────────────────────────────────────────────────────────────────
+// Der „Test abgebrochen"-Button wurde aus allen Test-Formularen entfernt. Nicht
+// (vollständig) durchführbare Tests werden über die Notiz kommuniziert. Dieses
+// Badge bleibt nur für die Anzeige ALTER, bereits als abgebrochen gespeicherter
+// Ergebnisse in den Verlaufslisten erhalten.
 
 export const AbortBadge: React.FC<{ comment?: string }> = ({ comment }) => (
   <span

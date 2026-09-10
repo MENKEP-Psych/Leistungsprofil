@@ -807,7 +807,25 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
           { key: 'cfm', label: 'Direkter Abruf (ROCFT)',     rawKey: 'cfm' },
           { key: 'cqm', label: 'Verzögerter Abruf (ROCFT)',  rawKey: 'cqm' },
         ] as const;
+
+        // Kein einziger Rohwert erfasst (abgebrochen ODER nur eine Notiz „nicht
+        // durchführbar") → EINE Sammelzeile mit der Notiz/Begründung, statt drei
+        // identische „Nicht auswertbar"-Zeilen (analog VLMT `vlmtNoRaw`).
+        const rocftNoRaw = !ROCFT_SCALES.some(s => hasVal(latest.rawValues[s.rawKey]));
+        if (rocftNoRaw && (latest.aborted || hasVal(latest.note))) {
+          data.push({
+            label: 'Rey-Osterrieth-Figur (ROCFT)',
+            currentPr: 'n/a',
+            date: latest.date,
+            domain: '3. Visuo-Perz. / Visuo-Konstr.',
+            testGroup: 'Rey-Osterrieth-Figur (ROCFT)',
+            note: combineNotes(latest, previous),
+            ...abt(latest),
+          });
+        }
+
         for (const s of ROCFT_SCALES) {
+          if (rocftNoRaw) break;
           const currPr = latest.percentileRanks[s.key];
           if ((currPr === undefined || currPr === 'n/a') && !latest.aborted && !hasVal(latest.rawValues[s.rawKey])) continue;
           data.push({
@@ -1384,6 +1402,48 @@ export function useProfileData(patient: Patient, results: TestResult[]): Profile
         </div>
       </div>
     ) : undefined;
+
+    // ── Notiz-only-Tests (keine Messwerte, nur eine erklärende Notiz) ─────────
+    // Seit dem Wegfall des „Test abgebrochen"-Buttons werden nicht durchführbare
+    // Tests als normales Ergebnis mit Notiz gespeichert (ohne aborted-Flag).
+    // Damit die Notiz im Profil nicht verloren geht, hier für jeden solchen Test
+    // EINE Sammelzeile erzeugen — aber nur, wenn der Test sonst gar nichts
+    // beigetragen hat (kein Rohwert, kein PR, kein Textergebnis).
+    const NOTE_ONLY_META: Record<string, { label: string; domain: string; testGroup: string; groupPrefix: string; subdomain?: string }> = {
+      tmt:          { label: 'Trail Making Test', domain: '1. Aufmerksamkeit (Geschwindigkeit)', testGroup: 'Trail Making Test', groupPrefix: 'Trail Making Test', subdomain: '1.1 Informationsverarbeitungsgeschwindigkeit' },
+      vlmt:         { label: 'VLMT', domain: '2. Gedächtnis (Lernen)', testGroup: 'VLMT', groupPrefix: 'VLMT', subdomain: '2.3 Verbale Lern- und Merkfähigkeit' },
+      tol:          { label: 'Turm von London', domain: '5. Exekutive Funktionen', testGroup: 'Turm von London', groupPrefix: 'Turm von London' },
+      tap:          { label: 'TAP', domain: '1. Aufmerksamkeit', testGroup: 'TAP', groupPrefix: 'TAP' },
+      wms_vw:       { label: 'Visuelle Wiedergabe WMS-IV', domain: '2. Gedächtnis (Visuell)', testGroup: 'Visuelle Wiedergabe WMS-IV', groupPrefix: 'Visuelle Wiedergabe', subdomain: '2.4 Figurales Gedächtnis' },
+      rey:          { label: 'Rey-Osterrieth-Figur (ROCFT)', domain: '3. Visuo-Perz. / Visuo-Konstr.', testGroup: 'Rey-Osterrieth-Figur (ROCFT)', groupPrefix: 'Rey-Osterrieth-Figur' },
+      zahlenspanne: { label: 'Zahlenspanne', domain: '2. Gedächtnis (Kurzzeitgedächtnis)', testGroup: 'Zahlenspanne', groupPrefix: 'Zahlenspanne', subdomain: '2.1 Merkspanne' },
+      blockspanne:  { label: 'Blockspanne', domain: '2. Gedächtnis (Kurzzeitgedächtnis)', testGroup: 'Blockspanne', groupPrefix: 'Blockspanne', subdomain: '2.1 Merkspanne' },
+      lg:           { label: 'Logisches Gedächtnis (WMS-IV)', domain: '2. Gedächtnis (Lernen)', testGroup: 'Logisches Gedächtnis (WMS-IV)', groupPrefix: 'Logisches Gedächtnis', subdomain: '2.3 Verbale Lern- und Merkfähigkeit' },
+      mosaik:       { label: 'Mosaik-Test', domain: '3. Visuo-Perz. / Visuo-Konstr.', testGroup: 'Mosaik-Test', groupPrefix: 'Mosaik-Test' },
+      lps:          { label: 'LPS', domain: '4. Intellektuelle Leistungen', testGroup: 'LPS', groupPrefix: 'LPS' },
+      buerotest:    { label: 'Bürotest', domain: '5. Exekutive Funktionen', testGroup: 'Bürotest', groupPrefix: 'Bürotest' },
+      tagesplan:    { label: 'Tagesplan', domain: '5. Exekutive Funktionen', testGroup: 'Tagesplan', groupPrefix: 'Tagesplan' },
+      neglect_gf:   { label: 'Explorationsaufgaben', domain: '6. Visuelle Exploration', testGroup: 'Explorationsaufgaben', groupPrefix: 'Explorationsaufgaben' },
+    };
+    for (const [testId, meta] of Object.entries(NOTE_ONLY_META)) {
+      const latest = results
+        .filter(r => r.testId === testId)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      if (!latest || !hasVal(latest.note) || latest.aborted) continue;
+      const already =
+        profileData.some(d => (d.testGroup ?? '').startsWith(meta.groupPrefix)) ||
+        textResults.some(t => (t.testGroup ?? '').startsWith(meta.groupPrefix));
+      if (already) continue;
+      profileData.push({
+        label: meta.label,
+        currentPr: 'n/a',
+        date: latest.date,
+        domain: meta.domain,
+        subdomain: meta.subdomain,
+        testGroup: meta.testGroup,
+        note: latest.note!.trim(),
+      });
+    }
 
     return { profileData, textResults, extraBottomContent };
   }, [patient, results]);

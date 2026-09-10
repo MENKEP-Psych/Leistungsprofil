@@ -5,7 +5,7 @@ import { History as HistoryIcon, Plus, AlignLeft, Trash2 } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { PrBadge, AbortBadge, FormSave, AbortButton, HistoryRowActions, HistoryDate } from './TestForm';
+import { PrBadge, AbortBadge, FormSave, HistoryRowActions, HistoryDate } from './TestForm';
 
 interface CustomTestTabProps {
   patient: Patient;
@@ -50,8 +50,6 @@ export const CustomTestTab: React.FC<CustomTestTabProps> = ({ patient, previousR
   const [lastSaved,    setLastSaved]    = useState(false);
   const [editingId,    setEditingId]    = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [aborted,      setAborted]      = useState(false);
-  const [abortComment, setAbortComment] = useState('');
   const [nameError,    setNameError]    = useState(false);
 
   const results = previousResults
@@ -68,7 +66,6 @@ export const CustomTestTab: React.FC<CustomTestTabProps> = ({ patient, previousR
     setTestName(''); setRows([emptyRow()]); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
-    setAborted(false); setAbortComment('');
     setNameError(false);
   };
 
@@ -82,17 +79,13 @@ export const CustomTestTab: React.FC<CustomTestTabProps> = ({ patient, previousR
       setRows(parsed.length > 0 ? parsed : [emptyRow()]);
     } catch { setRows([emptyRow()]); }
     setNote(res.note ?? '');
-    setAborted(res.aborted ?? false);
-    setAbortComment(res.abortComment ?? '');
     setNameError(false);
   };
 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
   const handleSave = () => {
-    if (!aborted) {
-      if (!testName.trim()) { setNameError(true); return; }
-    }
+    if (!testName.trim()) { setNameError(true); return; }
     setNameError(false);
 
     const percentileRanks: Record<string, number | string> = {};
@@ -109,8 +102,6 @@ export const CustomTestTab: React.FC<CustomTestTabProps> = ({ patient, previousR
       rawValues: { testName: testName.trim(), rows: JSON.stringify(rows) },
       calculatedValues: {}, percentileRanks,
       normInfo: 'Eigener Test',
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -248,12 +239,6 @@ export const CustomTestTab: React.FC<CustomTestTabProps> = ({ patient, previousR
               <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Besonderheiten…"
                 className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
             </div>
-            <AbortButton
-              aborted={aborted}
-              comment={abortComment}
-              onToggle={() => { setAborted(!aborted); if (aborted) setAbortComment(''); }}
-              onComment={setAbortComment}
-            />
             <div className="pt-1">
               <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
             </div>

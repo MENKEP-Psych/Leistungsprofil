@@ -1,6 +1,6 @@
 import React from 'react';
 import { Patient, PRResult } from '../types';
-import { PRProfile, ProfileLegend, TextProfileResult } from './PRProfile';
+import { PRProfile, ProfileLegend, AxisScale, TextProfileResult } from './PRProfile';
 import { formatDate } from '../lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,6 +86,15 @@ export const PrintProfileExperimental: React.FC<PrintProfileExperimentalProps> =
           <div className="print-head-inner">
             <PrintHeader patient={patient} />
             <ProfileLegend className="mt-2 pt-2 border-t border-slate-200" printMode />
+            {/* SD-/PR-Skala im wiederkehrenden Seitenkopf → auf jeder PDF-Seite sichtbar.
+                Der linke Abstand entspricht der Testnamen-Spalte (LEFT_W = 300px) plus
+                dem p-6-Innenabstand der Grafik-Karte, damit die Skala über den Balken sitzt. */}
+            <div className="mt-1 flex">
+              <div style={{ width: 300 + 24, flexShrink: 0 }} />
+              <div className="flex-1" style={{ paddingRight: 24 }}>
+                <AxisScale printMode />
+              </div>
+            </div>
           </div>
         </td>
       </tr>
@@ -101,6 +110,7 @@ export const PrintProfileExperimental: React.FC<PrintProfileExperimentalProps> =
             textResults={textResults}
             extraBottomContent={extraBottomContent}
             hideLegend
+            hideAxis
             hideTrendArrows
             printMode
           />

@@ -3,7 +3,7 @@ import { useShortcutSave } from '../hooks/useShortcutSave';
 import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
 import {
   Bell, BellOff, Save, CheckCircle2,
-  History, Trash2, Check, Zap, StickyNote, X, RotateCcw, ClipboardList, OctagonX,
+  History, Trash2, Check, Zap, StickyNote, X, RotateCcw, ClipboardList,
 } from 'lucide-react';
 import { addTapNormEntries, buildNormEntriesFromSF } from '../lib/tapNormDb';
 import { Patient, TestResult } from '../types';
@@ -407,7 +407,13 @@ const decodeResult = (r: TestResult): ColData => {
   const rv = r.rawValues ?? {};
   const pr = r.percentileRanks ?? {};
   const s = (k: string) => String(rv[k] ?? '');
-  const p = (k: string) => String(pr[k] ?? '');
+  // Beim Zurückladen einer gespeicherten Sitzung ins Formular darf das interne
+  // "kein PR"-Sentinel 'n/a' NIE in ein Eingabefeld gelangen — sonst steht bei
+  // jeder Folge-Testung in allen nicht ausgefüllten PR-Feldern der Eingangstestung
+  // "n/a" und muss vor der Eingabe erst gelöscht werden. Nur echte, früher
+  // ausschließlich in `percentileRanks` (statt im e_*_pr-Rohfeld) abgelegte Werte
+  // sollen als Fallback geladen werden.
+  const p = (k: string) => { const v = String(pr[k] ?? ''); return v === 'n/a' ? '' : v; };
   const today = new Date().toISOString().split('T')[0];
   const d = (k: string) => s(k) || today; // date fields fall back to today if empty
 
@@ -974,8 +980,6 @@ export const TAPTab: React.FC<TAPTabProps> = ({
     setOpenNotes(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
 
   const upd = (f: Partial<SF>) => setCol(prev => ({ ...prev, f: { ...prev.f, ...f } }));
-  const setAborted = (v: boolean) => setCol(prev => ({ ...prev, aborted: v, abortComment: v ? prev.abortComment : '' }));
-  const setAbortComment = (v: string) => setCol(prev => ({ ...prev, abortComment: v }));
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -1121,29 +1125,6 @@ export const TAPTab: React.FC<TAPTabProps> = ({
             <option>Gesichtsfeld</option>
             <option>Neglect</option>
           </select>
-        )}
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={() => setAborted(!col.aborted)}
-          className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-all border select-none',
-            col.aborted
-              ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 text-orange-500 dark:text-orange-400'
-              : 'bg-slate-50 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:border-orange-200 dark:hover:border-orange-800 hover:text-orange-400',
-          )}
-        >
-          <OctagonX size={12} /> Test abgebrochen / unvollständig
-        </button>
-        {col.aborted && (
-          <input
-            type="text"
-            tabIndex={-1}
-            value={col.abortComment}
-            onChange={e => setAbortComment(e.target.value)}
-            placeholder="Grund (optional)…"
-            className="text-[10px] px-2 py-1.5 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg outline-none focus:ring-1 focus:ring-orange-400 text-slate-700 dark:text-slate-200 placeholder:text-orange-300 w-48"
-          />
         )}
         <button
           tabIndex={-1}

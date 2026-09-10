@@ -1,7 +1,8 @@
 import React from 'react';
-import { OctagonX } from 'lucide-react';
+import { OctagonX, StickyNote } from 'lucide-react';
 import { PRResult } from '../types';
 import { formatDate } from '../lib/utils';
+import { probit } from '../lib/stats';
 import { useProfilePrefs } from '../context/ProfilePrefsContext';
 
 export interface TextProfileResult {
@@ -24,6 +25,9 @@ interface PRProfileProps {
   /** Force-hide the trend connectors/arrows regardless of the user preference.
    *  Used by the PDF export, which should never render the arrows. */
   hideTrendArrows?: boolean;
+  /** Suppress the in-flow SD/PR scale at the top of the chart. Used by the PDF
+   *  print layout, which renders the scale in the repeating page header instead. */
+  hideAxis?: boolean;
   /** Render previous/older-measurement markers in high contrast (dark outline on
    *  white) instead of the subtle grey/hatched on-screen style, so they stay
    *  legible in black-and-white print. Set by the PDF export. */
@@ -40,18 +44,27 @@ function dotColor(pr: number | string): string {
   return '#94a3b8';
 }
 
-const SD_BOUNDS = [0, 2, 15.87, 31, 69, 84.13, 98, 100] as const;
-const N_SEGS = SD_BOUNDS.length - 1;
+// ── X-Achse: linear in Standardabweichungen (z-Werten) ──────────────────────
+// Die horizontale Position eines Prozentrangs ergibt sich aus seinem z-Wert
+// (Probit-Transformation). Dadurch entspricht ein gleich großer SD-Unterschied
+// überall der gleichen Pixel-Breite — „ein Hauptstrich = eine SD".
+//
+// Z_MAX = 3 deckt den vollständigen PR-Bereich 0–100 an den Rändern ab.
+// Alternative: Z_MAX = 2.5  → der sichtbare Rand entspricht dann PR ~0,6 / ~99,4
+// (schärfere Auflösung im klinisch relevanten Kernbereich; Extremwerte werden
+// an den Rand geklemmt).
+export const Z_MAX = 3;
+
+/** z-Wert → X-Position in Prozent (0 = links, 100 = rechts). */
+export function zToX(z: number): number {
+  const zc = Math.max(-Z_MAX, Math.min(Z_MAX, z));
+  return ((zc + Z_MAX) / (2 * Z_MAX)) * 100;
+}
 
 function prToX(pr: number): number {
-  const p = Math.max(0, Math.min(100, pr));
-  for (let i = 0; i < N_SEGS; i++) {
-    if (p <= SD_BOUNDS[i + 1]) {
-      const t = (p - SD_BOUNDS[i]) / (SD_BOUNDS[i + 1] - SD_BOUNDS[i]);
-      return ((i + t) / N_SEGS) * 100;
-    }
-  }
-  return 100;
+  // pr = 0 / 100 würde z = ∓∞ ergeben → auf einen sehr kleinen Rand-Abstand klemmen.
+  const p = Math.max(0.05, Math.min(99.95, pr)) / 100;
+  return zToX(probit(p));
 }
 
 function prToNum(pr: number | string): number {
@@ -284,6 +297,10 @@ function findTestGroupOrder(sub: SubsectionConfig, tg: string): number {
 // Reference lines overlay
 // ---------------------------------------------------------------------------
 
+// Ganze SD = durchgezogener „Hauptstrich"; halbe SD = feine gestrichelte Linie.
+const SD_MAJOR = [-3, -2, -1, 0, 1, 2, 3] as const;
+const SD_MINOR = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5] as const;
+
 const ReferenceLinesOverlay: React.FC = () => (
   <>
     <div className="absolute pointer-events-none" style={{
@@ -292,32 +309,61 @@ const ReferenceLinesOverlay: React.FC = () => (
       transform: 'translateY(-50%)',
       zIndex: 0,
     }} />
-    {[2, 31, 69, 98].map(pr => (
-      <div key={pr} className="absolute pointer-events-none" style={{
-        left: `${prToX(pr)}%`, top: 0, bottom: 0, width: 1,
+    {SD_MINOR.map(z => (
+      <div key={z} className="absolute pointer-events-none" style={{
+        left: `${zToX(z)}%`, top: 0, bottom: 0, width: 1,
         backgroundImage: 'repeating-linear-gradient(to bottom, #cbd5e1 0px, #cbd5e1 3px, transparent 3px, transparent 6px)',
         zIndex: 1,
       }} />
     ))}
-    {[15.87, 84.13].map(pr => (
-      <div key={pr} className="absolute pointer-events-none" style={{
-        left: `${prToX(pr)}%`, top: 0, bottom: 0, width: 2,
-        backgroundColor: '#94a3b8',
+    {SD_MAJOR.map(z => (
+      <div key={z} className="absolute pointer-events-none" style={{
+        left: `${zToX(z)}%`, top: 0, bottom: 0,
+        width: z === 0 ? 2 : 1.5,
+        backgroundColor: z === 0 ? '#94a3b8' : '#cbd5e1',
         zIndex: 1,
       }} />
     ))}
   </>
 );
 
+// SD-/PR-Skala über dem Profil. `pr` = leerer String → nur die SD-Marke ohne
+// Prozentrang (die Ränder ±3 SD liegen jenseits PR 1 bzw. 99).
 const AXIS_TICKS = [
-  { pr: 2,     sd: '−2' },
-  { pr: 15.87, sd: '−1' },
-  { pr: 31,    sd: '−½' },
-  { pr: 50,    sd: '0'  },
-  { pr: 69,    sd: '+½' },
-  { pr: 84.13, sd: '+1' },
-  { pr: 98,    sd: '+2' },
+  { z: -3, pr: ''   },
+  { z: -2, pr: '2'  },
+  { z: -1, pr: '16' },
+  { z:  0, pr: '50' },
+  { z:  1, pr: '84' },
+  { z:  2, pr: '98' },
+  { z:  3, pr: ''   },
 ] as const;
+
+/** Wiederverwendbare SD-/PR-Skala (Bildschirm-Kopf + wiederkehrender PDF-Seitenkopf). */
+export const AxisScale: React.FC<{ className?: string; printMode?: boolean }> = ({ className = '', printMode = false }) => (
+  <div className={`relative w-full ${className}`} style={{ height: 30 }}>
+    <div className="absolute" style={{ left: 0, right: 0, top: 15, height: 1, backgroundColor: printMode ? '#94a3b8' : '#cbd5e1' }} />
+    {SD_MINOR.map(z => (
+      <div key={`m${z}`} className="absolute" style={{ left: `${zToX(z)}%`, transform: 'translateX(-50%)', top: 12, width: 1, height: 4, backgroundColor: '#cbd5e1' }} />
+    ))}
+    {AXIS_TICKS.map(({ z, pr }) => {
+      // Rand-Ticks (±3 SD) nach innen ausrichten, damit die Beschriftung nicht
+      // aus der Grafik-Spalte herausragt.
+      const edge = z === -Z_MAX ? 'left' : z === Z_MAX ? 'right' : 'center';
+      const xf = edge === 'left' ? 'none' : edge === 'right' ? 'translateX(-100%)' : 'translateX(-50%)';
+      const ai = edge === 'left' ? 'flex-start' : edge === 'right' ? 'flex-end' : 'center';
+      return (
+        <div key={z} className="absolute flex flex-col" style={{ left: `${zToX(z)}%`, transform: xf, alignItems: ai, top: 0 }}>
+          <span className="text-[10px] font-semibold tabular-nums leading-none text-slate-500 dark:text-slate-400">{pr || ' '}</span>
+          <div style={{ width: 1, height: 6, backgroundColor: '#94a3b8', marginTop: 1, alignSelf: ai }} />
+          <span className="text-[9px] tabular-nums leading-none mt-0.5 text-slate-400 dark:text-slate-500 whitespace-nowrap">
+            {z > 0 ? `+${z}` : z} SD
+          </span>
+        </div>
+      );
+    })}
+  </div>
+);
 
 // ---------------------------------------------------------------------------
 // Legend — shared between the in-flow profile and the print header
@@ -357,10 +403,37 @@ export const ProfileLegend: React.FC<{ className?: string; printMode?: boolean }
 );
 
 // ---------------------------------------------------------------------------
+// Notiz-Banner — die Notiz(en) einer Testung werden EINMAL, gut lesbar und über
+// die volle Breite am Anfang des jeweiligen Testblocks gezeigt (statt je Zeile
+// klein wiederholt). Betrifft besonders Tests mit mehreren Kennwerten (VLMT,
+// TAP, ROCFT, WMS, LG, Zahlen-/Blockspanne …).
+// ---------------------------------------------------------------------------
+
+const collectNotes = (rows: { note?: string }[]): string[] =>
+  orderedUnique(rows.map(r => (r.note ?? '').trim()).filter(Boolean));
+
+const NoteBanner: React.FC<{ notes: string[]; printMode?: boolean }> = ({ notes, printMode = false }) => {
+  if (notes.length === 0) return null;
+  return (
+    <div className="pr-note-banner mt-0.5 mb-1.5 space-y-0.5">
+      {notes.map((n, i) => (
+        <div
+          key={i}
+          className={`flex items-start gap-1.5 ${printMode ? 'text-slate-700' : 'text-slate-600 dark:text-slate-300'}`}
+        >
+          <StickyNote size={12} className="shrink-0 mt-[3px] text-slate-400 dark:text-slate-500" />
+          <p className="text-[12px] leading-snug whitespace-pre-wrap flex-1 min-w-0">{n}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
-export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [], extraBottomContent, containerRef, hideLegend = false, hideTrendArrows = false, printMode = false }: PRProfileProps) => {
+export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [], extraBottomContent, containerRef, hideLegend = false, hideTrendArrows = false, hideAxis = false, printMode = false }: PRProfileProps) => {
   const { showTrendArrows } = useProfilePrefs();
   // PDF-Export erzwingt „keine Pfeile" über hideTrendArrows, unabhängig von der Nutzer-Einstellung.
   const showArrows = showTrendArrows && !hideTrendArrows;
@@ -480,11 +553,9 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
                 : formatDate(res.date)}
             </div>
           )}
-          {res.note && (
-            <p className="text-[10px] italic text-slate-400 dark:text-slate-500 mt-0.5 leading-snug whitespace-pre-wrap">
-              {res.note}
-            </p>
-          )}
+          {/* Die Notiz wird nicht mehr je Zeile klein angezeigt, sondern EINMAL
+              als gut lesbares Banner am Anfang des jeweiligen Testblocks
+              (siehe <NoteBanner> im Testgruppen-Renderer). */}
         </div>
 
         <div className="flex-1 relative self-center" style={{ height: 28 }}>
@@ -645,6 +716,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
         </div>
 
         {/* Ungrouped rows (no testGroup set) */}
+        <NoteBanner notes={collectNotes(noGroupResults)} printMode={printMode} />
         {noGroupResults.map((res, i) => (
           <React.Fragment key={`ng-${i}`}>{BarRow({ res })}</React.Fragment>
         ))}
@@ -710,6 +782,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
                             {tg !== 'VLMT' && <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />}
                           </div>
                         )}
+                        <NoteBanner notes={collectNotes(tgResults)} printMode={printMode} />
                         {tgResults.map((res, i) => (
                           <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
                         ))}
@@ -740,6 +813,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
                     <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">{tg}</span>
                     <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />
                   </div>
+                  <NoteBanner notes={collectNotes(tgResults)} printMode={printMode} />
                   {tgResults.map((res, i) => <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>)}
                   {tgText.map((tr, i)    => <React.Fragment key={i}>{TextRow({ tr })}</React.Fragment>)}
                 </div>
@@ -761,14 +835,18 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
   return (
     <div ref={containerRef} className="pr-chart w-full bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-md shadow-slate-200/60 dark:shadow-none">
 
-      {/* Spaltenkopf: kennzeichnet die Werte hinter dem Testnamen als Prozentränge (PR) */}
+      {/* Spaltenkopf + SD-/PR-Skala: die Skala steht jetzt oben über der Grafik-Spalte
+          (Bildschirm). Im PDF wird sie stattdessen im wiederkehrenden Seitenkopf gezeigt
+          (hideAxis) — sie erscheint dort auf jeder Seite. */}
       {hasMainContent && (
-        <div className="flex items-center mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-700">
+        <div className="flex items-end mb-2 pb-1.5 border-b border-slate-200 dark:border-slate-700">
           <div className="shrink-0 pr-3 flex items-baseline justify-between" style={{ width: LEFT_W }}>
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Test</span>
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-300">Prozentrang (PR)</span>
           </div>
-          <div className="flex-1" />
+          <div className="flex-1">
+            {!hideAxis && <AxisScale printMode={printMode} />}
+          </div>
         </div>
       )}
 
@@ -792,6 +870,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
             <div className={!isFirst ? 'border-t border-slate-300 dark:border-slate-600 pt-4 mb-3' : 'mb-3'}>
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-widest text-center">{domain}</h3>
             </div>
+            <NoteBanner notes={collectNotes(noGroupResults)} printMode={printMode} />
             {noGroupResults.map((res, i) => (
               <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
             ))}
@@ -804,6 +883,7 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
                     <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">{tg}</span>
                     <div className="h-px flex-1 bg-slate-300 dark:bg-slate-500" />
                   </div>
+                  <NoteBanner notes={collectNotes(tgResults)} printMode={printMode} />
                   {tgResults.map((res, i) => (
                     <React.Fragment key={i}>{BarRow({ res })}</React.Fragment>
                   ))}
@@ -817,24 +897,8 @@ export const PRProfile: React.FC<PRProfileProps> = ({ results, textResults = [],
         );
       })}
 
-      {/* Bottom axis — after domains 1–5, before domain 6 */}
-      <div className="mt-4 flex">
-        <div style={{ width: LEFT_W, flexShrink: 0 }} />
-        <div className="flex-1 relative" style={{ height: 26 }}>
-          <div className="absolute" style={{ left: 0, right: 0, top: 0, height: 1, backgroundColor: '#e2e8f0' }} />
-          {AXIS_TICKS.map(({ pr, sd }) => (
-            <div key={pr} className="absolute flex flex-col items-center" style={{ left: `${prToX(pr)}%`, transform: 'translateX(-50%)', top: 0 }}>
-              <div style={{ width: 1, height: 4, backgroundColor: '#94a3b8' }} />
-              <span className="text-[8px] text-slate-400 dark:text-slate-500 tabular-nums leading-none mt-0.5">
-                {Math.round(pr)}
-              </span>
-              <span className="text-[7px] text-slate-300 dark:text-slate-600 tabular-nums leading-none">
-                {sd} SD
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Trennlinie vor Domäne 6 / Legende (die SD-/PR-Skala steht jetzt oben). */}
+      <div className="mt-4" />
 
       {/* Legend — after axis when domain 6 is absent; injected inside domain 6 otherwise.
           Suppressed entirely in print mode (rendered in the repeating page header). */}

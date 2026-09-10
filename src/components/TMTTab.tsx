@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
 import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
-import { OctagonX, X, History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { formatDate, calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import tmtNorms from '../data/tmt-norms.json';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, resolveNoteOnlySave } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, OutOfRangeWarning, confirmNoteOnlySave } from './TestForm';
 import { lookupTMTPR } from '../lib/tmtUtils';
 
 interface TMTTabProps {
@@ -65,8 +65,6 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [aborted, setAborted] = useState(false);
-  const [abortComment, setAbortComment] = useState('');
 
   const tmtResults = previousResults
     .filter(r => r.testId === 'tmt')
@@ -115,8 +113,6 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     setNoteA(res.rawValues.noteA != null ? String(res.rawValues.noteA) : (legacySingleNote ? (res.note ?? '') : ''));
     setNoteB(res.rawValues.noteB != null ? String(res.rawValues.noteB) : (legacySingleNote ? (res.note ?? '') : ''));
     setErrors({});
-    setAborted(res.aborted ?? false);
-    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => {
@@ -125,22 +121,18 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
     setErrors({});
-    setAborted(false); setAbortComment('');
   };
 
-  const handleSave = () => {
-    // Kein Teil ausgefüllt, aber eine Notiz für A/B eingetragen → nachfragen und
-    // ggf. als Abbruch mit der Notiz als Begründung speichern (statt die Notiz
-    // beim Speichern kommentarlos zu verwerfen).
+  const handleSave = async () => {
+    // Kein Teil ausgefüllt, aber eine Notiz für A/B eingetragen → kurz nachfragen
+    // und als normales Ergebnis mit der Notiz speichern (statt sie kommentarlos zu
+    // verwerfen). Kein „abgebrochen"-Flag mehr.
     const bothEmpty = rawA.trim() === '' && rawB.trim() === '';
-    let effAborted = aborted;
-    let effAbortComment = aborted ? abortComment : '';
-    const promptedAbort = !aborted && bothEmpty
-      && resolveNoteOnlySave([noteA.trim(), noteB.trim()].filter(Boolean).join(' · ')) === 'save-aborted';
-    if (promptedAbort) {
-      effAborted = true;
-      effAbortComment = [noteA.trim(), noteB.trim()].filter(Boolean).join(' · ');
-    } else if (!aborted && !validate()) {
+    if (bothEmpty) {
+      const noteText = [noteA.trim(), noteB.trim()].filter(Boolean).join(' · ');
+      if (!noteText) return;
+      if (!(await confirmNoteOnlySave(noteText))) return;
+    } else if (!validate()) {
       return;
     }
 
@@ -169,11 +161,8 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     if (errA.trim() && !isNaN(Number(errA))) rawValues.errA = Number(errA);
     if (errB.trim() && !isNaN(Number(errB))) rawValues.errB = Number(errB);
     // Teil A und B haben je eine eigene Notiz (ersetzt die frühere gemeinsame `note`).
-    // Bei „Notiz als Abbruch" wandert der Text nur in abortComment.
-    if (!promptedAbort) {
-      if (noteA.trim()) rawValues.noteA = noteA;
-      if (noteB.trim()) rawValues.noteB = noteB;
-    }
+    if (noteA.trim()) rawValues.noteA = noteA;
+    if (noteB.trim()) rawValues.noteB = noteB;
 
     const group = tmtNorms.altersgruppen.find(g => ageAtTest >= g.von && ageAtTest <= g.bis);
 
@@ -186,13 +175,11 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
       percentileRanks: prs,
       normInfo: `Norm: ${group?.label ?? 'Unbekannt'}, ${tmtNorms.meta.quelle}`,
       examiner,
-      note: promptedAbort ? undefined : (noteA || noteB || undefined),
+      note: noteA || noteB || undefined,
       domainMapping: {
         A: '1. Aufmerksamkeit (Geschwindigkeit)',
         B: '1. Aufmerksamkeit (Geteilt)',
       },
-      aborted: effAborted || undefined,
-      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -201,7 +188,6 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
     setRawA(''); setRawB(''); setErrA(''); setErrB(''); setNoteA(''); setNoteB('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
-    setAborted(false); setAbortComment('');
   };
 
   useShortcutSave(handleSave);
@@ -369,33 +355,6 @@ export const TMTTab: React.FC<TMTTabProps> = ({ patient, previousResults, onSave
                 />
               </div>
             </div>
-            {!aborted ? (
-              <button type="button" onClick={() => setAborted(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors w-full">
-                <OctagonX size={13} /> Test abgebrochen / unvollständig
-              </button>
-            ) : (
-              <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-orange-600 bg-orange-50 rounded-xl border border-orange-100 w-full">
-                <OctagonX size={13} /> Abgebrochen <X size={11} className="ml-auto" />
-              </button>
-            )}
-            {aborted && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-orange-50 border border-orange-100">
-                  <OctagonX size={14} className="text-orange-400 shrink-0" />
-                  <span className="text-sm font-medium text-orange-700 flex-1">Abgebrochen / unvollständig</span>
-                  <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                    className="text-orange-300 hover:text-orange-500 transition-colors rounded p-0.5">
-                    <X size={13} />
-                  </button>
-                </div>
-                <textarea value={abortComment} onChange={e => setAbortComment(e.target.value)}
-                  placeholder="Grund (optional)…" rows={2}
-                  className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none placeholder:text-orange-300"
-                />
-              </div>
-            )}
             {ageOutOfRange && <OutOfRangeWarning />}
             <div className="pt-1">
               <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />

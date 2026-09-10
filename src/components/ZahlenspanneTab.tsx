@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
 import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
-import { OctagonX, X, History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { calculateAge } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { lookupZahlenspanne } from '../lib/normUtils';
-import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, resolveNoteOnlySave } from './TestForm';
+import { PrBadge, AbortBadge, HistoryRowActions, FormSave, HistoryDate, confirmNoteOnlySave } from './TestForm';
 
 interface ZahlenspanneTabProps {
   patient: Patient;
@@ -58,8 +58,6 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
   const [lastSaved, setLastSaved] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [aborted, setAborted] = useState(false);
-  const [abortComment, setAbortComment] = useState('');
 
   const ageAtTest = calculateAge(patient.geburtsdatum, date);
 
@@ -77,7 +75,6 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
     setRawVorwaerts(''); setRawRueckwaerts(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
-    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -87,21 +84,14 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
     setDate(res.date);
     setExaminer(res.examiner ?? '');
     setNote(res.note ?? '');
-    setAborted(res.aborted ?? false);
-    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => { setEditingId(null); reset(); };
 
-  const handleSave = () => {
-    // Ohne Messwerte und ohne „abgebrochen": entweder Notiz-als-Abbruch speichern
-    // (nach Rückfrage) oder – wie bisher – nichts tun.
-    let effAborted = aborted;
-    let effAbortComment = aborted ? abortComment : '';
-    if (!aborted && vwVal === null && rkVal === null) {
-      if (resolveNoteOnlySave(note) === 'cancel') return;
-      effAborted = true;
-      effAbortComment = note.trim();
+  const handleSave = async () => {
+    if (vwVal === null && rkVal === null) {
+      if (!note.trim()) return;
+      if (!(await confirmNoteOnlySave(note))) return;
     }
 
     const rawValues: Record<string, number | string> = {};
@@ -116,9 +106,7 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
       id: editingId ?? Date.now().toString(),
       testId: 'zahlenspanne',
       date, examiner,
-      // Bei „Notiz als Abbruch" wandert der Text in abortComment, damit er im
-      // Leistungsprofil nicht doppelt (unter dem Label und auf dem Balken) steht.
-      note: effAborted && !aborted ? '' : note,
+      note: note || undefined,
       rawValues,
       calculatedValues: {},
       percentileRanks: prs,
@@ -127,8 +115,6 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
         vorwaerts: '2. Gedächtnis (Merkspanne)',
         rueckwaerts: '2. Gedächtnis (Arbeitsgedächtnis)',
       },
-      aborted: effAborted || undefined,
-      abortComment: effAborted ? effAbortComment : undefined,
     };
 
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
@@ -236,33 +222,6 @@ export const ZahlenspanneTab: React.FC<ZahlenspanneTabProps> = ({ patient, previ
                 className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300"
               />
             </div>
-            {!aborted ? (
-              <button type="button" onClick={() => setAborted(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors w-full">
-                <OctagonX size={13} /> Test abgebrochen / unvollständig
-              </button>
-            ) : (
-              <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-orange-600 bg-orange-50 rounded-xl border border-orange-100 w-full">
-                <OctagonX size={13} /> Abgebrochen <X size={11} className="ml-auto" />
-              </button>
-            )}
-            {aborted && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-orange-50 border border-orange-100">
-                  <OctagonX size={14} className="text-orange-400 shrink-0" />
-                  <span className="text-sm font-medium text-orange-700 flex-1">Abgebrochen / unvollständig</span>
-                  <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                    className="text-orange-300 hover:text-orange-500 transition-colors rounded p-0.5">
-                    <X size={13} />
-                  </button>
-                </div>
-                <textarea value={abortComment} onChange={e => setAbortComment(e.target.value)}
-                  placeholder="Grund (optional)…" rows={2}
-                  className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none placeholder:text-orange-300"
-                />
-              </div>
-            )}
             <div className="pt-1">
               <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
             </div>

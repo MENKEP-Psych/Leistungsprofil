@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useShortcutSave } from '../hooks/useShortcutSave';
 import { useAutoFocusFirst } from '../hooks/useAutoFocusFirst';
-import { OctagonX, X, History as HistoryIcon } from 'lucide-react';
+import { History as HistoryIcon } from 'lucide-react';
 import { Patient, TestResult } from '../types';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
@@ -24,8 +24,6 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({ patient, previousRes
   const [lastSaved,    setLastSaved]    = useState(false);
   const [editingId,    setEditingId]    = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [aborted,      setAborted]      = useState(false);
-  const [abortComment, setAbortComment] = useState('');
 
   const results = previousResults
     .filter(r => r.testId === 'tagesplan')
@@ -35,7 +33,6 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({ patient, previousRes
     setPlanText(''); setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setExaminer(currentUser ?? '');
-    setAborted(false); setAbortComment('');
   };
 
   const startEdit = (res: TestResult) => {
@@ -44,8 +41,6 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({ patient, previousRes
     setExaminer(res.examiner ?? '');
     setPlanText(String(res.rawValues.planText ?? ''));
     setNote(res.note ?? '');
-    setAborted(res.aborted ?? false);
-    setAbortComment(res.abortComment ?? '');
   };
 
   const cancelEdit = () => { setEditingId(null); reset(); };
@@ -57,8 +52,6 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({ patient, previousRes
       rawValues: { planText },
       calculatedValues: {}, percentileRanks: {},
       normInfo: 'Tagesplan – Qualitative Auswertung',
-      aborted: aborted || undefined,
-      abortComment: aborted ? abortComment : undefined,
     };
     if (editingId) { onUpdate(result); setEditingId(null); } else { onSave(result); }
     setLastSaved(true); setTimeout(() => setLastSaved(false), 3000);
@@ -113,30 +106,6 @@ export const TagesplanTab: React.FC<TagesplanTabProps> = ({ patient, previousRes
               <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Besonderheiten…"
                 className="w-full px-3 py-2 text-sm text-slate-700 bg-white rounded-xl outline-none border border-slate-300 focus:ring-2 focus:ring-slate-400/60 transition-all placeholder:text-slate-300" />
             </div>
-            {!aborted ? (
-              <button type="button" onClick={() => setAborted(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-colors w-full">
-                <OctagonX size={13} /> Test abgebrochen / unvollständig
-              </button>
-            ) : (
-              <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-orange-600 bg-orange-50 rounded-xl border border-orange-100 w-full">
-                <OctagonX size={13} /> Abgebrochen <X size={11} className="ml-auto" />
-              </button>
-            )}
-            {aborted && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-orange-50 border border-orange-100">
-                  <OctagonX size={14} className="text-orange-400 shrink-0" />
-                  <span className="text-sm font-medium text-orange-700 flex-1">Abgebrochen / unvollständig</span>
-                  <button type="button" onClick={() => { setAborted(false); setAbortComment(''); }}
-                    className="text-orange-300 hover:text-orange-500 transition-colors rounded p-0.5"><X size={13} /></button>
-                </div>
-                <textarea value={abortComment} onChange={e => setAbortComment(e.target.value)}
-                  placeholder="Grund (optional)…" rows={2}
-                  className="w-full px-3 py-2 text-sm rounded-2xl bg-orange-50 outline-none focus:ring-2 focus:ring-orange-200 transition-all resize-none placeholder:text-orange-300" />
-              </div>
-            )}
             <div className="pt-1">
               <FormSave onSave={handleSave} saved={lastSaved} editingId={editingId} onCancel={cancelEdit} />
             </div>
